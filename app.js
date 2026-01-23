@@ -53,6 +53,8 @@ const MOOD_KEYWORDS = {
 // State
 let currentGifUrl = '';
 let currentSearchQuery = '';
+let recentGifs = []; // Track recently shown GIFs to avoid repetition
+const MAX_RECENT_GIFS = 15; // Remember last 15 GIFs
 
 // DOM Elements
 const moodTextArea = document.getElementById('mood-text');
@@ -168,6 +170,16 @@ async function handleGenerateGif() {
     }
 }
 
+// Shuffle array for better randomization
+function shuffleArray(array) {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+}
+
 // Check if GIF is Bravo-related
 function isBravoGif(gif) {
     const bravoKeywords = ['housewives', 'bravo', 'rhony', 'rhobh', 'rhoa', 'rhonj', 'rhoc', 'rhop', 'rhoslc', 'vanderpump', 'southern charm', 'below deck'];
@@ -190,12 +202,16 @@ async function fetchGif(query) {
     }
 
     try {
+        // Add random offset for more variety (0-50)
+        const randomOffset = Math.floor(Math.random() * 50);
+
         // Use Giphy search endpoint
         const endpoint = `${GIPHY_BASE_URL}/search`;
         const params = new URLSearchParams({
             api_key: GIPHY_API_KEY,
             q: query,
             limit: 50, // Get more results to filter from
+            offset: randomOffset, // Add variety by starting at different positions
             rating: 'pg-13',
             lang: 'en'
         });
@@ -215,16 +231,37 @@ async function fetchGif(query) {
         }
 
         // Filter for Bravo-only GIFs
-        const bravoGifs = data.data.filter(gif => isBravoGif(gif));
+        let bravoGifs = data.data.filter(gif => isBravoGif(gif));
 
         // If we have Bravo GIFs, use them. Otherwise use all results.
-        const gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
+        let gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
 
-        // Pick a random GIF from results
-        const randomIndex = Math.floor(Math.random() * gifsToUse.length);
-        const gif = gifsToUse[randomIndex];
+        // Filter out recently shown GIFs
+        gifsToUse = gifsToUse.filter(gif => !recentGifs.includes(gif.images.original.url));
 
-        return gif.images.original.url;
+        // If we filtered out all GIFs, clear recent history and try again
+        if (gifsToUse.length === 0) {
+            console.log('All GIFs were recent, clearing history');
+            recentGifs = [];
+            gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
+        }
+
+        // Shuffle for better randomization
+        const shuffledGifs = shuffleArray(gifsToUse);
+
+        // Pick the first GIF from shuffled results
+        const gif = shuffledGifs[0];
+        const gifUrl = gif.images.original.url;
+
+        // Add to recent GIFs history
+        recentGifs.push(gifUrl);
+
+        // Keep only the last MAX_RECENT_GIFS
+        if (recentGifs.length > MAX_RECENT_GIFS) {
+            recentGifs.shift(); // Remove oldest
+        }
+
+        return gifUrl;
 
     } catch (error) {
         console.error('Giphy API error:', error);
@@ -235,8 +272,26 @@ async function fetchGif(query) {
 
 // Get a random demo GIF (fallback)
 function getDemoGif() {
-    const randomIndex = Math.floor(Math.random() * DEMO_GIFS.length);
-    return DEMO_GIFS[randomIndex];
+    // Filter out recently shown demo GIFs
+    let availableGifs = DEMO_GIFS.filter(gif => !recentGifs.includes(gif));
+
+    // If all have been shown recently, reset and use all
+    if (availableGifs.length === 0) {
+        recentGifs = [];
+        availableGifs = DEMO_GIFS;
+    }
+
+    // Shuffle and pick first
+    const shuffled = shuffleArray(availableGifs);
+    const gifUrl = shuffled[0];
+
+    // Add to history
+    recentGifs.push(gifUrl);
+    if (recentGifs.length > MAX_RECENT_GIFS) {
+        recentGifs.shift();
+    }
+
+    return gifUrl;
 }
 
 // Display the GIF
