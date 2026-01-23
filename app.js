@@ -5,13 +5,16 @@
 const GIPHY_API_KEY = 'your_api_key_here'; // Users should get their own key from developers.giphy.com
 const GIPHY_BASE_URL = 'https://api.giphy.com/v1/gifs';
 
-// Demo mode fallback GIFs (Bravo-themed) if API key is not set
+// Demo mode fallback GIFs (Real Housewives themed) if API key is not set
 const DEMO_GIFS = [
-    'https://media.giphy.com/media/1Z02vuppxP1Pa/giphy.gif',
-    'https://media.giphy.com/media/l0CLTQeZrFWmMxIWc/giphy.gif',
-    'https://media.giphy.com/media/DIgqIAIjBqKlYPp0AK/giphy.gif',
-    'https://media.giphy.com/media/SrDsJj5i1Chm8/giphy.gif',
-    'https://media.giphy.com/media/xTiTnGQBF0vfpfPEg8/giphy.gif'
+    'https://media.giphy.com/media/SrDsJj5i1Chm8/giphy.gif', // RHONJ table flip
+    'https://media.giphy.com/media/qE8EuaecnytDsEPAdZ/giphy.gif', // RHONY Ramona
+    'https://media.giphy.com/media/f67ZYBsFUCPPbON87T/giphy.gif', // RHOA Nene
+    'https://media.giphy.com/media/woep9lZ7V41I4/giphy.gif', // RHOBH
+    'https://media.giphy.com/media/TkoHjDI8jhVAGrgT4A/giphy.gif', // RHONY Sonja
+    'https://media.giphy.com/media/l0CLTQeZrFWmMxIWc/giphy.gif', // Real Housewives
+    'https://media.giphy.com/media/1Z02vuppxP1Pa/giphy.gif', // Real Housewives
+    'https://media.giphy.com/media/DIgqIAIjBqKlYPp0AK/giphy.gif' // Real Housewives
 ];
 
 // Mood analysis mapping - keywords to Bravo search terms
@@ -141,14 +144,24 @@ function analyzeMood(text) {
         }
     }
 
-    // If we found a match, return a search term from that category
+    // Build search query
+    let searchQuery = '';
+
+    // If we found a match, get a search term from that category
     if (bestMatch && highestScore > 0) {
         const searches = MOOD_KEYWORDS[bestMatch].searches;
-        return searches[Math.floor(Math.random() * searches.length)];
+        searchQuery = searches[Math.floor(Math.random() * searches.length)];
+    } else {
+        // Default fallback - just use general Real Housewives search
+        searchQuery = 'real housewives reaction';
     }
 
-    // Default fallback - just use general Real Housewives search
-    return 'real housewives reaction';
+    // If channeling a housewife, incorporate their name in search
+    if (currentHousewife) {
+        searchQuery = `${searchQuery} ${currentHousewife.name}`;
+    }
+
+    return searchQuery;
 }
 
 // Handle mood selection from dropdown
@@ -220,9 +233,19 @@ function isBravoGif(gif) {
     const username = (gif.username || '').toLowerCase();
 
     // Check if title, slug, or username contains Bravo keywords
-    return bravoKeywords.some(keyword =>
+    const isBravo = bravoKeywords.some(keyword =>
         title.includes(keyword) || slug.includes(keyword) || username.includes(keyword)
     );
+
+    if (!isBravo) return false;
+
+    // If filtering by specific franchise, check franchise match
+    if (currentFranchise !== 'all') {
+        const franchiseKey = currentFranchise.toLowerCase();
+        return title.includes(franchiseKey) || slug.includes(franchiseKey);
+    }
+
+    return true;
 }
 
 // Fetch GIF from Giphy API
@@ -642,38 +665,6 @@ function channelRandomHousewife() {
     currentHousewifeDisplay.classList.remove('hidden');
 
     showNotification(`You're channeling ${randomHousewife.name}!`);
-}
-
-// ============ UPDATE FETCH GIF WITH FILTERS ============
-
-// Update isBravoGif to respect franchise filter
-const originalIsBravoGif = isBravoGif;
-function isBravoGif(gif) {
-    // First check if it's Bravo-related at all
-    if (!originalIsBravoGif(gif)) {
-        return false;
-    }
-
-    // If filtering by specific franchise
-    if (currentFranchise !== 'all') {
-        const title = (gif.title || '').toLowerCase();
-        const slug = (gif.slug || '').toLowerCase();
-        const franchiseKey = currentFranchise.toLowerCase();
-        return title.includes(franchiseKey) || slug.includes(franchiseKey);
-    }
-
-    return true;
-}
-
-// Update analyzeMood to consider current housewife
-const originalAnalyzeMood = analyzeMood;
-function analyzeMood(text) {
-    // If channeling a housewife, incorporate their name in search
-    if (currentHousewife) {
-        const baseSearch = originalAnalyzeMood(text);
-        return `${baseSearch} ${currentHousewife.name}`;
-    }
-    return originalAnalyzeMood(text);
 }
 
 // Initialize app
