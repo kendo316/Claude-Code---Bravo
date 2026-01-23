@@ -14,6 +14,42 @@ const DEMO_GIFS = [
     'https://media.giphy.com/media/xTiTnGQBF0vfpfPEg8/giphy.gif'
 ];
 
+// Mood analysis mapping - keywords to Bravo search terms
+const MOOD_KEYWORDS = {
+    fabulous: {
+        keywords: ['amazing', 'great', 'awesome', 'wonderful', 'fantastic', 'perfect', 'best', 'love', 'happy', 'excited', 'celebration', 'win', 'won', 'success', 'promoted', 'raise', 'blessed', 'grateful'],
+        searches: ['real housewives fabulous', 'real housewives celebration', 'real housewives champagne', 'real housewives dancing']
+    },
+    sassy: {
+        keywords: ['whatever', 'please', 'seriously', 'really', 'ok', 'sure', 'right', 'obvious', 'duh', 'clearly'],
+        searches: ['real housewives eye roll', 'real housewives sassy', 'real housewives attitude', 'real housewives smirk']
+    },
+    dramatic: {
+        keywords: ['cannot', 'believe', 'shocked', 'surprised', 'wow', 'omg', 'crazy', 'insane', 'wild', 'unbelievable', 'dramatic'],
+        searches: ['real housewives shocked', 'real housewives gasp', 'real housewives dramatic', 'real housewives stunned']
+    },
+    overit: {
+        keywords: ['annoying', 'irritating', 'frustrating', 'tired', 'exhausted', 'done', 'over', 'enough', 'stop', 'quit', 'leave', 'bye'],
+        searches: ['real housewives done', 'real housewives over it', 'real housewives eye roll', 'real housewives bye']
+    },
+    angry: {
+        keywords: ['angry', 'mad', 'furious', 'pissed', 'hate', 'terrible', 'worst', 'awful', 'horrible', 'annoyed', 'upset'],
+        searches: ['real housewives angry', 'real housewives fight', 'real housewives mad', 'real housewives yelling']
+    },
+    confused: {
+        keywords: ['confused', 'what', 'why', 'how', 'huh', 'understand', 'make sense', 'unclear', 'lost'],
+        searches: ['real housewives confused', 'real housewives what', 'real housewives huh', 'real housewives question']
+    },
+    supportive: {
+        keywords: ['proud', 'support', 'congrats', 'congratulations', 'good job', 'well done', 'you got this', 'believe'],
+        searches: ['real housewives cheers', 'real housewives hug', 'real housewives support', 'real housewives proud']
+    },
+    shady: {
+        keywords: ['shady', 'side eye', 'suspicious', 'hmm', 'interesting', 'tea', 'gossip', 'rumor', 'heard'],
+        searches: ['real housewives side eye', 'real housewives shade', 'real housewives smirk', 'real housewives tea']
+    }
+};
+
 // State
 let currentGifUrl = '';
 let currentSearchQuery = '';
@@ -50,6 +86,37 @@ function updateCharCounter() {
     }
 }
 
+// Analyze text input to determine mood category
+function analyzeMood(text) {
+    const lowerText = text.toLowerCase();
+    let bestMatch = null;
+    let highestScore = 0;
+
+    // Check each mood category for keyword matches
+    for (const [mood, data] of Object.entries(MOOD_KEYWORDS)) {
+        let score = 0;
+        for (const keyword of data.keywords) {
+            if (lowerText.includes(keyword)) {
+                score++;
+            }
+        }
+
+        if (score > highestScore) {
+            highestScore = score;
+            bestMatch = mood;
+        }
+    }
+
+    // If we found a match, return a search term from that category
+    if (bestMatch && highestScore > 0) {
+        const searches = MOOD_KEYWORDS[bestMatch].searches;
+        return searches[Math.floor(Math.random() * searches.length)];
+    }
+
+    // Default fallback - just use general Real Housewives search
+    return 'real housewives reaction';
+}
+
 // Handle mood selection from dropdown
 function handleMoodSelection() {
     if (moodDropdown.value) {
@@ -76,17 +143,16 @@ async function handleGenerateGif() {
     loadingSection.classList.remove('hidden');
 
     try {
-        // Determine search query
-        currentSearchQuery = moodSelection || textInput;
-
-        // Always add Bravo-related terms to search
-        const bravoTerms = ['real housewives', 'bravo', 'housewives'];
-        let searchQuery = currentSearchQuery;
+        let searchQuery;
 
         // If using dropdown, use the pre-configured search term
-        // If using text input, try to match sentiment and add bravo context
-        if (!moodSelection) {
-            searchQuery = `${textInput} ${bravoTerms[Math.floor(Math.random() * bravoTerms.length)]}`;
+        if (moodSelection) {
+            searchQuery = moodSelection;
+            currentSearchQuery = moodDropdown.options[moodDropdown.selectedIndex].text;
+        } else {
+            // Analyze the text input to find matching Bravo mood
+            searchQuery = analyzeMood(textInput);
+            currentSearchQuery = textInput;
         }
 
         // Fetch GIF
@@ -100,6 +166,19 @@ async function handleGenerateGif() {
         alert('Oops! Something went wrong. Try again, sweetie! 💎');
         resetToInput();
     }
+}
+
+// Check if GIF is Bravo-related
+function isBravoGif(gif) {
+    const bravoKeywords = ['housewives', 'bravo', 'rhony', 'rhobh', 'rhoa', 'rhonj', 'rhoc', 'rhop', 'rhoslc', 'vanderpump', 'southern charm', 'below deck'];
+    const title = (gif.title || '').toLowerCase();
+    const slug = (gif.slug || '').toLowerCase();
+    const username = (gif.username || '').toLowerCase();
+
+    // Check if title, slug, or username contains Bravo keywords
+    return bravoKeywords.some(keyword =>
+        title.includes(keyword) || slug.includes(keyword) || username.includes(keyword)
+    );
 }
 
 // Fetch GIF from Giphy API
@@ -116,7 +195,7 @@ async function fetchGif(query) {
         const params = new URLSearchParams({
             api_key: GIPHY_API_KEY,
             q: query,
-            limit: 25,
+            limit: 50, // Get more results to filter from
             rating: 'pg-13',
             lang: 'en'
         });
@@ -135,9 +214,15 @@ async function fetchGif(query) {
             return await fetchGif('real housewives');
         }
 
+        // Filter for Bravo-only GIFs
+        const bravoGifs = data.data.filter(gif => isBravoGif(gif));
+
+        // If we have Bravo GIFs, use them. Otherwise use all results.
+        const gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
+
         // Pick a random GIF from results
-        const randomIndex = Math.floor(Math.random() * data.data.length);
-        const gif = data.data[randomIndex];
+        const randomIndex = Math.floor(Math.random() * gifsToUse.length);
+        const gif = gifsToUse[randomIndex];
 
         return gif.images.original.url;
 
