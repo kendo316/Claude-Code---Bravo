@@ -143,16 +143,15 @@ function analyzeMood(text) {
     }
 
     // Build search query - always include "real housewives" in search
-    let searchQuery = 'real housewives ';
+    let searchQuery = 'real housewives';
 
-    // Add franchise filter if active
-    if (currentFranchise !== 'all') {
-        searchQuery += `${currentFranchise} `;
-    }
-
-    // Add housewife name if channeling
+    // Priority: Housewife > Franchise (don't use both - too restrictive)
     if (currentHousewife) {
-        searchQuery += `${currentHousewife.name} `;
+        // Use housewife name only
+        searchQuery += ` ${currentHousewife.name}`;
+    } else if (currentFranchise !== 'all') {
+        // Use franchise only if not channeling
+        searchQuery += ` ${currentFranchise}`;
     }
 
     // Add mood-based keywords
@@ -161,10 +160,10 @@ function analyzeMood(text) {
         const moodTerm = searches[Math.floor(Math.random() * searches.length)];
         // Extract just the mood keywords (remove "real housewives" prefix if present)
         const moodKeyword = moodTerm.replace('real housewives ', '');
-        searchQuery += moodKeyword;
+        searchQuery += ` ${moodKeyword}`;
     } else {
         // Default fallback
-        searchQuery += 'reaction';
+        searchQuery += ' reaction';
     }
 
     return searchQuery.trim();
@@ -254,8 +253,8 @@ async function fetchGif(query) {
     }
 
     try {
-        // Add random offset for more variety (0-50)
-        const randomOffset = Math.floor(Math.random() * 50);
+        // Add random offset for more variety (0-100 for more options)
+        const randomOffset = Math.floor(Math.random() * 100);
 
         // Use Giphy search endpoint
         const endpoint = `${GIPHY_BASE_URL}/search`;
@@ -268,6 +267,7 @@ async function fetchGif(query) {
             lang: 'en'
         });
 
+        console.log('Fetching from Giphy with query:', query);
         const response = await fetch(`${endpoint}?${params}`);
 
         if (!response.ok) {
@@ -278,24 +278,40 @@ async function fetchGif(query) {
 
         // Check if we got results
         if (!data.data || data.data.length === 0) {
-            // Fallback to a more general Bravo search
-            return await fetchGif('real housewives');
+            console.log('No results from Giphy, trying broader search');
+            // Try broader search
+            if (query !== 'real housewives') {
+                return await fetchGif('real housewives');
+            }
+            // Ultimate fallback
+            return getDemoGif();
         }
+
+        console.log(`Got ${data.data.length} results from Giphy`);
 
         // Filter for Bravo-only GIFs
         let bravoGifs = data.data.filter(gif => isBravoGif(gif));
 
-        // If we have Bravo GIFs, use them. Otherwise use all results.
-        let gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
+        console.log(`After filtering: ${bravoGifs.length} Bravo GIFs`);
+
+        // If NO Bravo GIFs found, try a simpler search
+        if (bravoGifs.length === 0) {
+            console.log('No Bravo GIFs found, trying simpler search');
+            if (query !== 'real housewives') {
+                return await fetchGif('real housewives');
+            }
+            // If even that fails, use demo
+            return getDemoGif();
+        }
 
         // Filter out recently shown GIFs
-        gifsToUse = gifsToUse.filter(gif => !recentGifs.includes(gif.images.original.url));
+        let gifsToUse = bravoGifs.filter(gif => !recentGifs.includes(gif.images.original.url));
 
-        // If we filtered out all GIFs, clear recent history and try again
+        // If we filtered out all GIFs, clear recent history and use all Bravo GIFs
         if (gifsToUse.length === 0) {
-            console.log('All GIFs were recent, clearing history');
+            console.log('All Bravo GIFs were recent, clearing history');
             recentGifs = [];
-            gifsToUse = bravoGifs.length > 0 ? bravoGifs : data.data;
+            gifsToUse = bravoGifs;
         }
 
         // Shuffle for better randomization
@@ -304,6 +320,8 @@ async function fetchGif(query) {
         // Pick the first GIF from shuffled results
         const gif = shuffledGifs[0];
         const gifUrl = gif.images.original.url;
+
+        console.log('Selected GIF:', gif.title);
 
         // Add to recent GIFs history
         recentGifs.push(gifUrl);
@@ -643,6 +661,12 @@ function handleFranchiseFilter(e) {
     const franchise = e.target.dataset.franchise;
     currentFranchise = franchise;
 
+    // Clear housewife channeling when selecting franchise
+    if (franchise !== 'all' && currentHousewife) {
+        currentHousewife = null;
+        currentHousewifeDisplay.classList.add('hidden');
+    }
+
     // Update active state
     filterButtons.forEach(btn => btn.classList.remove('active'));
     e.target.classList.add('active');
@@ -656,6 +680,16 @@ function handleFranchiseFilter(e) {
 function channelRandomHousewife() {
     const randomHousewife = HOUSEWIVES[Math.floor(Math.random() * HOUSEWIVES.length)];
     currentHousewife = randomHousewife;
+
+    // Clear franchise filter and set to "All" when channeling
+    currentFranchise = 'all';
+    filterButtons.forEach(btn => {
+        if (btn.dataset.franchise === 'all') {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
 
     currentHousewifeDisplay.textContent = `Channeling ${randomHousewife.name} from ${randomHousewife.show} — ${randomHousewife.energy}`;
     currentHousewifeDisplay.classList.remove('hidden');
