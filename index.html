@@ -15,6 +15,27 @@
         </header>
 
         <main>
+            <!-- Franchise Filters -->
+            <div class="franchise-filters">
+                <div class="filter-label">Filter by franchise:</div>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" data-franchise="all">All</button>
+                    <button class="filter-btn" data-franchise="rhony">NYC</button>
+                    <button class="filter-btn" data-franchise="rhobh">BH</button>
+                    <button class="filter-btn" data-franchise="rhoa">ATL</button>
+                    <button class="filter-btn" data-franchise="rhonj">NJ</button>
+                    <button class="filter-btn" data-franchise="rhop">Potomac</button>
+                    <button class="filter-btn" data-franchise="rhoslc">SLC</button>
+                </div>
+            </div>
+
+            <!-- Housewife Channeling -->
+            <div class="housewife-randomizer">
+                <button id="channel-housewife-btn" class="channel-btn">
+                    ✨ Channel a Random Housewife ✨
+                </button>
+                <div id="current-housewife" class="current-housewife hidden"></div>
+            </div>
             <div class="input-section">
                 <label for="mood-text">How are you feeling today?</label>
                 <textarea
@@ -127,6 +148,9 @@
             <div id="result-section" class="result-section hidden">
                 <div class="gif-container">
                     <img id="gif-image" src="" alt="Your Bravo mood GIF">
+                    <button id="favorite-btn" class="favorite-btn" aria-label="Add to favorites">
+                        <span class="heart">♡</span>
+                    </button>
                 </div>
                 <div class="result-actions">
                     <button id="share-btn" class="share-btn">
@@ -138,6 +162,19 @@
                     <button id="new-gif-btn" class="secondary-btn">
                         🔄 Try Another
                     </button>
+                </div>
+            </div>
+
+            <!-- Favorites Gallery -->
+            <div id="favorites-section" class="favorites-section hidden">
+                <div class="favorites-header">
+                    <h2>💎 My Favorite GIFs</h2>
+                    <button id="toggle-favorites-btn" class="toggle-favorites-btn">
+                        Show Favorites (<span id="favorites-count">0</span>)
+                    </button>
+                </div>
+                <div id="favorites-gallery" class="favorites-gallery hidden">
+                    <p class="empty-favorites">No favorites yet! Heart a GIF to save it here.</p>
                 </div>
             </div>
         </main>

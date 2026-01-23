@@ -50,11 +50,31 @@ const MOOD_KEYWORDS = {
     }
 };
 
+// Housewives data for randomizer
+const HOUSEWIVES = [
+    { name: 'Teresa Giudice', show: 'RHONJ', energy: 'Table-flipping passion' },
+    { name: 'Nene Leakes', show: 'RHOA', energy: 'Bloop energy' },
+    { name: 'Ramona Singer', show: 'RHONY', energy: 'Turtle time vibes' },
+    { name: 'Lisa Vanderpump', show: 'RHOBH', energy: 'British elegance' },
+    { name: 'Bethenny Frankel', show: 'RHONY', energy: 'Mention it all' },
+    { name: 'Kenya Moore', show: 'RHOA', energy: 'Gone with the wind' },
+    { name: 'Kyle Richards', show: 'RHOBH', energy: 'Beverly Hills drama' },
+    { name: 'Dorinda Medley', show: 'RHONY', energy: 'I made it nice!' },
+    { name: 'Phaedra Parks', show: 'RHOA', energy: 'Southern belle sass' },
+    { name: 'Sonja Morgan', show: 'RHONY', energy: 'Tipsy elegance' },
+    { name: 'Kim Richards', show: 'RHOBH', energy: 'Let\'s talk about it' },
+    { name: 'Gizelle Bryant', show: 'RHOP', energy: 'Word on the street' },
+    { name: 'Jen Shah', show: 'RHOSLC', energy: 'Shah squad energy' }
+];
+
 // State
 let currentGifUrl = '';
 let currentSearchQuery = '';
 let recentGifs = []; // Track recently shown GIFs to avoid repetition
 const MAX_RECENT_GIFS = 15; // Remember last 15 GIFs
+let currentFranchise = 'all'; // Current franchise filter
+let currentHousewife = null; // Currently channeling housewife
+let favorites = []; // Favorite GIFs
 
 // DOM Elements
 const moodTextArea = document.getElementById('mood-text');
@@ -67,6 +87,14 @@ const shareBtn = document.getElementById('share-btn');
 const downloadBtn = document.getElementById('download-btn');
 const newGifBtn = document.getElementById('new-gif-btn');
 const charCounter = document.getElementById('char-counter');
+const favoriteBtn = document.getElementById('favorite-btn');
+const favoritesSection = document.getElementById('favorites-section');
+const toggleFavoritesBtn = document.getElementById('toggle-favorites-btn');
+const favoritesGallery = document.getElementById('favorites-gallery');
+const favoritesCount = document.getElementById('favorites-count');
+const channelHousewifeBtn = document.getElementById('channel-housewife-btn');
+const currentHousewifeDisplay = document.getElementById('current-housewife');
+const filterButtons = document.querySelectorAll('.filter-btn');
 
 // Event Listeners
 moodTextArea.addEventListener('input', updateCharCounter);
@@ -75,6 +103,10 @@ generateBtn.addEventListener('click', handleGenerateGif);
 shareBtn.addEventListener('click', handleShare);
 downloadBtn.addEventListener('click', handleDownload);
 newGifBtn.addEventListener('click', resetApp);
+favoriteBtn.addEventListener('click', toggleFavorite);
+toggleFavoritesBtn.addEventListener('click', toggleFavoritesGallery);
+channelHousewifeBtn.addEventListener('click', channelRandomHousewife);
+filterButtons.forEach(btn => btn.addEventListener('click', handleFranchiseFilter));
 
 // Character counter
 function updateCharCounter() {
@@ -304,6 +336,9 @@ function displayGif(gifUrl) {
     resultSection.classList.remove('hidden');
     generateBtn.disabled = false;
 
+    // Update favorite button state
+    updateFavoriteButton();
+
     // Scroll to result
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -464,6 +499,184 @@ function resetToInput() {
     generateBtn.disabled = false;
 }
 
+// ============ FAVORITES SYSTEM ============
+
+// Load favorites from localStorage
+function loadFavorites() {
+    try {
+        const stored = localStorage.getItem('bravo-favorites');
+        favorites = stored ? JSON.parse(stored) : [];
+        updateFavoritesDisplay();
+    } catch (error) {
+        console.error('Error loading favorites:', error);
+        favorites = [];
+    }
+}
+
+// Save favorites to localStorage
+function saveFavorites() {
+    try {
+        localStorage.setItem('bravo-favorites', JSON.stringify(favorites));
+    } catch (error) {
+        console.error('Error saving favorites:', error);
+    }
+}
+
+// Toggle favorite status
+function toggleFavorite() {
+    if (!currentGifUrl) return;
+
+    const index = favorites.findIndex(fav => fav.url === currentGifUrl);
+
+    if (index > -1) {
+        // Remove from favorites
+        favorites.splice(index, 1);
+        showNotification('Removed from favorites');
+    } else {
+        // Add to favorites
+        favorites.push({
+            url: currentGifUrl,
+            query: currentSearchQuery,
+            timestamp: Date.now()
+        });
+        showNotification('Added to favorites! 💎');
+    }
+
+    saveFavorites();
+    updateFavoriteButton();
+    updateFavoritesDisplay();
+}
+
+// Update favorite button appearance
+function updateFavoriteButton() {
+    const isFavorited = favorites.some(fav => fav.url === currentGifUrl);
+    if (isFavorited) {
+        favoriteBtn.classList.add('favorited');
+        favoriteBtn.querySelector('.heart').textContent = '♥';
+    } else {
+        favoriteBtn.classList.remove('favorited');
+        favoriteBtn.querySelector('.heart').textContent = '♡';
+    }
+}
+
+// Toggle favorites gallery visibility
+function toggleFavoritesGallery() {
+    const isHidden = favoritesGallery.classList.contains('hidden');
+    if (isHidden) {
+        favoritesGallery.classList.remove('hidden');
+        toggleFavoritesBtn.textContent = `Hide Favorites (${favorites.length})`;
+    } else {
+        favoritesGallery.classList.add('hidden');
+        toggleFavoritesBtn.textContent = `Show Favorites (${favorites.length})`;
+    }
+}
+
+// Update favorites display
+function updateFavoritesDisplay() {
+    favoritesCount.textContent = favorites.length;
+
+    if (favorites.length === 0) {
+        favoritesSection.classList.add('hidden');
+        favoritesGallery.innerHTML = '<p class="empty-favorites">No favorites yet! Heart a GIF to save it here.</p>';
+        return;
+    }
+
+    favoritesSection.classList.remove('hidden');
+
+    // Sort by most recent first
+    const sortedFavorites = [...favorites].sort((a, b) => b.timestamp - a.timestamp);
+
+    favoritesGallery.innerHTML = sortedFavorites.map((fav, index) => `
+        <div class="favorite-item" data-url="${fav.url}" data-query="${fav.query}">
+            <img src="${fav.url}" alt="${fav.query}">
+            <button class="remove-favorite" data-index="${index}" aria-label="Remove favorite">×</button>
+        </div>
+    `).join('');
+
+    // Add event listeners to favorite items
+    document.querySelectorAll('.favorite-item').forEach(item => {
+        item.addEventListener('click', (e) => {
+            if (!e.target.classList.contains('remove-favorite')) {
+                currentGifUrl = item.dataset.url;
+                currentSearchQuery = item.dataset.query;
+                displayGif(currentGifUrl);
+            }
+        });
+    });
+
+    // Add event listeners to remove buttons
+    document.querySelectorAll('.remove-favorite').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const url = btn.parentElement.dataset.url;
+            favorites = favorites.filter(fav => fav.url !== url);
+            saveFavorites();
+            updateFavoritesDisplay();
+            showNotification('Removed from favorites');
+        });
+    });
+}
+
+// ============ FRANCHISE FILTERS ============
+
+// Handle franchise filter selection
+function handleFranchiseFilter(e) {
+    const franchise = e.target.dataset.franchise;
+    currentFranchise = franchise;
+
+    // Update active state
+    filterButtons.forEach(btn => btn.classList.remove('active'));
+    e.target.classList.add('active');
+
+    showNotification(`Filtering by ${franchise === 'all' ? 'All Bravo' : franchise.toUpperCase()}`);
+}
+
+// ============ HOUSEWIFE RANDOMIZER ============
+
+// Channel a random housewife
+function channelRandomHousewife() {
+    const randomHousewife = HOUSEWIVES[Math.floor(Math.random() * HOUSEWIVES.length)];
+    currentHousewife = randomHousewife;
+
+    currentHousewifeDisplay.textContent = `Channeling ${randomHousewife.name} from ${randomHousewife.show} — ${randomHousewife.energy}`;
+    currentHousewifeDisplay.classList.remove('hidden');
+
+    showNotification(`You're channeling ${randomHousewife.name}!`);
+}
+
+// ============ UPDATE FETCH GIF WITH FILTERS ============
+
+// Update isBravoGif to respect franchise filter
+const originalIsBravoGif = isBravoGif;
+function isBravoGif(gif) {
+    // First check if it's Bravo-related at all
+    if (!originalIsBravoGif(gif)) {
+        return false;
+    }
+
+    // If filtering by specific franchise
+    if (currentFranchise !== 'all') {
+        const title = (gif.title || '').toLowerCase();
+        const slug = (gif.slug || '').toLowerCase();
+        const franchiseKey = currentFranchise.toLowerCase();
+        return title.includes(franchiseKey) || slug.includes(franchiseKey);
+    }
+
+    return true;
+}
+
+// Update analyzeMood to consider current housewife
+const originalAnalyzeMood = analyzeMood;
+function analyzeMood(text) {
+    // If channeling a housewife, incorporate their name in search
+    if (currentHousewife) {
+        const baseSearch = originalAnalyzeMood(text);
+        return `${baseSearch} ${currentHousewife.name}`;
+    }
+    return originalAnalyzeMood(text);
+}
+
 // Initialize app
+loadFavorites();
 console.log('🍸 Bravo Mood GIF App Loaded! 💎');
 console.log('Get your Giphy API key at: https://developers.giphy.com/');
