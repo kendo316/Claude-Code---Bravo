@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Express your mood with iconic Bravo and Real Housewives GIFs">
+    <title>Bravo Mood GIF - Real Housewives Edition</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🍸 Bravo Mood GIF 🍸</h1>
+            <p class="tagline">Express yourself like a Real Housewife</p>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <label for="mood-text">How are you feeling today?</label>
+                <textarea
+                    id="mood-text"
+                    placeholder="Tell us about your day... 'My coworker ate my lunch' or 'Just closed a huge deal!'"
+                    rows="3"
+                    maxlength="200"
+                ></textarea>
+                <div class="char-count"><span id="char-counter">0</span>/200</div>
+            </div>
+
+            <div class="mood-selector-section">
+                <label for="mood-dropdown">Or pick an iconic Bravo mood:</label>
+                <select id="mood-dropdown">
+                    <option value="">Select your vibe...</option>
+                    <optgroup label="Feeling Fabulous">
+                        <option value="real housewives fabulous">Gone with the wind fabulous</option>
+                        <option value="real housewives living my best life">Living my best life</option>
+                        <option value="real housewives turtle time">Turtle time!</option>
+                        <option value="real housewives champagne">Pop the champagne!</option>
+                    </optgroup>
+                    <optgroup label="Feeling Sassy">
+                        <option value="real housewives not well bitch">Not well, bitch!</option>
+                        <option value="real housewives bye wig">Bye, wig!</option>
+                        <option value="real housewives clip">Clip!</option>
+                        <option value="real housewives you're doing amazing">You're doing amazing, sweetie!</option>
+                    </optgroup>
+                    <optgroup label="Feeling Dramatic">
+                        <option value="real housewives table flip">Table flip moment</option>
+                        <option value="real housewives how dare you">How dare you!</option>
+                        <option value="real housewives who is she">Who is she?</option>
+                        <option value="real housewives stunned">I'm stunned</option>
+                    </optgroup>
+                    <optgroup label="Feeling Over It">
+                        <option value="real housewives not my circus">Not my circus</option>
+                        <option value="real housewives close your legs">Close your legs to married men</option>
+                        <option value="real housewives done">I'm done!</option>
+                        <option value="real housewives goodbye kyle">Goodbye Kyle!</option>
+                    </optgroup>
+                    <optgroup label="Feeling Supportive">
+                        <option value="real housewives you got this">You got this!</option>
+                        <option value="real housewives proud of you">So proud of you!</option>
+                        <option value="real housewives cheers">Cheers to that!</option>
+                        <option value="real housewives love that">Love that journey for you</option>
+                    </optgroup>
+                </select>
+            </div>
+
+            <button id="generate-btn" class="generate-btn">
+                ✨ Get My GIF ✨
+            </button>
+
+            <div id="loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Finding the perfect Bravo moment...</p>
+            </div>
+
+            <div id="result-section" class="result-section hidden">
+                <div class="gif-container">
+                    <img id="gif-image" src="" alt="Your Bravo mood GIF">
+                </div>
+                <div class="result-actions">
+                    <button id="share-btn" class="share-btn">
+                        📤 Share
+                    </button>
+                    <button id="download-btn" class="download-btn">
+                        💾 Download
+                    </button>
+                    <button id="new-gif-btn" class="secondary-btn">
+                        🔄 Try Another
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>Powered by Giphy • Made with 💎 for Bravo fans</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
