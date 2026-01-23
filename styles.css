@@ -114,39 +114,6 @@ textarea:focus {
     margin-top: 0.25rem;
 }
 
-/* Mood Selector */
-.mood-selector-section {
-    margin-bottom: 1.5rem;
-}
-
-select {
-    width: 100%;
-    padding: 1rem;
-    border: 2px solid var(--bravo-purple);
-    border-radius: 12px;
-    font-size: 1rem;
-    font-family: inherit;
-    background: var(--bravo-light);
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-select:focus {
-    outline: none;
-    border-color: var(--bravo-pink);
-    box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.1);
-    background: white;
-}
-
-optgroup {
-    font-weight: 700;
-    color: var(--bravo-purple);
-}
-
-option {
-    padding: 0.5rem;
-}
-
 /* Buttons */
 .generate-btn {
     width: 100%;
@@ -606,8 +573,7 @@ header::before {
         font-size: 1.125rem;
     }
 
-    textarea,
-    select {
+    textarea {
         font-size: 1.0625rem;
     }
 

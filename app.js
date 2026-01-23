@@ -81,7 +81,6 @@ let favorites = []; // Favorite GIFs
 
 // DOM Elements
 const moodTextArea = document.getElementById('mood-text');
-const moodDropdown = document.getElementById('mood-dropdown');
 const generateBtn = document.getElementById('generate-btn');
 const loadingSection = document.getElementById('loading');
 const resultSection = document.getElementById('result-section');
@@ -101,7 +100,6 @@ const filterButtons = document.querySelectorAll('.filter-btn');
 
 // Event Listeners
 moodTextArea.addEventListener('input', updateCharCounter);
-moodDropdown.addEventListener('change', handleMoodSelection);
 generateBtn.addEventListener('click', handleGenerateGif);
 shareBtn.addEventListener('click', handleShare);
 downloadBtn.addEventListener('click', handleDownload);
@@ -144,43 +142,41 @@ function analyzeMood(text) {
         }
     }
 
-    // Build search query
-    let searchQuery = '';
+    // Build search query - always include "real housewives" in search
+    let searchQuery = 'real housewives ';
 
-    // If we found a match, get a search term from that category
+    // Add franchise filter if active
+    if (currentFranchise !== 'all') {
+        searchQuery += `${currentFranchise} `;
+    }
+
+    // Add housewife name if channeling
+    if (currentHousewife) {
+        searchQuery += `${currentHousewife.name} `;
+    }
+
+    // Add mood-based keywords
     if (bestMatch && highestScore > 0) {
         const searches = MOOD_KEYWORDS[bestMatch].searches;
-        searchQuery = searches[Math.floor(Math.random() * searches.length)];
+        const moodTerm = searches[Math.floor(Math.random() * searches.length)];
+        // Extract just the mood keywords (remove "real housewives" prefix if present)
+        const moodKeyword = moodTerm.replace('real housewives ', '');
+        searchQuery += moodKeyword;
     } else {
-        // Default fallback - just use general Real Housewives search
-        searchQuery = 'real housewives reaction';
+        // Default fallback
+        searchQuery += 'reaction';
     }
 
-    // If channeling a housewife, incorporate their name in search
-    if (currentHousewife) {
-        searchQuery = `${searchQuery} ${currentHousewife.name}`;
-    }
-
-    return searchQuery;
-}
-
-// Handle mood selection from dropdown
-function handleMoodSelection() {
-    if (moodDropdown.value) {
-        // Clear text area when dropdown is selected
-        moodTextArea.value = '';
-        updateCharCounter();
-    }
+    return searchQuery.trim();
 }
 
 // Main function to generate GIF
 async function handleGenerateGif() {
     const textInput = moodTextArea.value.trim();
-    const moodSelection = moodDropdown.value;
 
     // Validate input
-    if (!textInput && !moodSelection) {
-        alert('Please enter how you\'re feeling or select a mood! 💅');
+    if (!textInput) {
+        alert('Please enter how you\'re feeling! 💅');
         return;
     }
 
@@ -190,17 +186,11 @@ async function handleGenerateGif() {
     loadingSection.classList.remove('hidden');
 
     try {
-        let searchQuery;
+        // Analyze the text input to find matching Bravo mood
+        const searchQuery = analyzeMood(textInput);
+        currentSearchQuery = textInput;
 
-        // If using dropdown, use the pre-configured search term
-        if (moodSelection) {
-            searchQuery = moodSelection;
-            currentSearchQuery = moodDropdown.options[moodDropdown.selectedIndex].text;
-        } else {
-            // Analyze the text input to find matching Bravo mood
-            searchQuery = analyzeMood(textInput);
-            currentSearchQuery = textInput;
-        }
+        console.log('Search query:', searchQuery); // Debug
 
         // Fetch GIF
         const gifUrl = await fetchGif(searchQuery);
@@ -225,24 +215,31 @@ function shuffleArray(array) {
     return shuffled;
 }
 
-// Check if GIF is Bravo-related
+// Check if GIF is Bravo-related (strict filtering)
 function isBravoGif(gif) {
-    const bravoKeywords = ['housewives', 'bravo', 'rhony', 'rhobh', 'rhoa', 'rhonj', 'rhoc', 'rhop', 'rhoslc', 'vanderpump', 'southern charm', 'below deck'];
     const title = (gif.title || '').toLowerCase();
     const slug = (gif.slug || '').toLowerCase();
     const username = (gif.username || '').toLowerCase();
 
-    // Check if title, slug, or username contains Bravo keywords
-    const isBravo = bravoKeywords.some(keyword =>
-        title.includes(keyword) || slug.includes(keyword) || username.includes(keyword)
-    );
+    // MUST contain "housewives" or "bravo" - strict requirement
+    const hasHousewives = title.includes('housewives') || slug.includes('housewives');
+    const hasBravo = title.includes('bravo') || slug.includes('bravo') || username.includes('bravo');
 
-    if (!isBravo) return false;
+    const isBravo = hasHousewives || hasBravo;
+
+    if (!isBravo) {
+        console.log('Filtered out (not Bravo):', title);
+        return false;
+    }
 
     // If filtering by specific franchise, check franchise match
     if (currentFranchise !== 'all') {
         const franchiseKey = currentFranchise.toLowerCase();
-        return title.includes(franchiseKey) || slug.includes(franchiseKey);
+        const matchesFranchise = title.includes(franchiseKey) || slug.includes(franchiseKey);
+        if (!matchesFranchise) {
+            console.log('Filtered out (wrong franchise):', title, 'wanted:', franchiseKey);
+        }
+        return matchesFranchise;
     }
 
     return true;
@@ -506,7 +503,6 @@ async function handleDownload() {
 // Reset app to initial state
 function resetApp() {
     moodTextArea.value = '';
-    moodDropdown.value = '';
     updateCharCounter();
     resultSection.classList.add('hidden');
     currentGifUrl = '';
