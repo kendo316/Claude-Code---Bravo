@@ -2,7 +2,7 @@
 // Real Housewives Edition
 
 // Giphy API Configuration
-const GIPHY_API_KEY = 'your_api_key_here'; // Users should get their own key from developers.giphy.com
+const GIPHY_API_KEY = 'jih7RDcJ8NC4N14oawwIY0pPv7nTeVaz'; // Giphy API key
 const GIPHY_BASE_URL = 'https://api.giphy.com/v1/gifs';
 
 // Demo mode fallback GIFs (Real Housewives themed) if API key is not set
