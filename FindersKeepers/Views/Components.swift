@@ -6,52 +6,96 @@ import UIKit
 
 // MARK: - Images
 
-/// Loads screenshots from Photos and remembers small ones, so scrolling back up is instant.
+/// Loads screenshots from Photos.
+/// Full-size images are fetched ahead of time during the weekly look, so the next one is ready
+/// before you get to it, and two requests for the same screenshot share one download.
 @MainActor
 enum ImageLoader {
+    /// Large enough to show any iPhone screenshot at its real size.
+    private static let screenPixels = CGSize(width: 1320, height: 2868)
+    private static let thumbnailPixels = CGSize(width: 420, height: 560)
+
     private static let thumbnails: NSCache<NSString, UIImage> = {
         let cache = NSCache<NSString, UIImage>()
-        cache.countLimit = 500
+        cache.countLimit = 600
         return cache
     }()
+
+    private static let screens: NSCache<NSString, UIImage> = {
+        let cache = NSCache<NSString, UIImage>()
+        cache.countLimit = 8
+        return cache
+    }()
+
+    private static var loading: [String: Task<UIImage?, Never>] = [:]
 
     static func thumbnail(for asset: PHAsset) async -> UIImage? {
         let key = asset.localIdentifier as NSString
         if let cached = thumbnails.object(forKey: key) { return cached }
-        let image = await PhotoLibrary.image(for: asset, targetSize: CGSize(width: 360, height: 780), contentMode: .aspectFill)
+        let image = await PhotoLibrary.image(for: asset, targetSize: thumbnailPixels, contentMode: .aspectFill)
         if let image { thumbnails.setObject(image, forKey: key) }
         return image
     }
 
+    /// The full screenshot. Returns nil only if Photos cannot supply it (for example, iCloud is unreachable).
     static func screen(for asset: PHAsset) async -> UIImage? {
-        await PhotoLibrary.image(for: asset, targetSize: CGSize(width: 1290, height: 2796), contentMode: .aspectFit)
+        let id = asset.localIdentifier
+        if let cached = screens.object(forKey: id as NSString) { return cached }
+        if let inProgress = loading[id] { return await inProgress.value }
+        let task = Task { await PhotoLibrary.image(for: asset, targetSize: screenPixels, contentMode: .aspectFit) }
+        loading[id] = task
+        let image = await task.value
+        loading[id] = nil
+        if let image { screens.setObject(image, forKey: id as NSString) }
+        return image
+    }
+
+    /// Starts fetching screenshots that will be needed soon.
+    static func prepare(_ assets: some Sequence<PHAsset>) {
+        for asset in assets {
+            Task { _ = await screen(for: asset) }
+        }
     }
 }
 
-/// A small tile for the grid.
+/// A tile for the grid: a crop of the screenshot with its title underneath,
+/// so you can tell what it is without squinting.
 struct Thumbnail: View {
     let asset: PHAsset
+    var caption: String?
     @State private var image: UIImage?
 
     var body: some View {
-        Color.white.opacity(0.06)
-            .aspectRatio(9.0 / 19.5, contentMode: .fit)
-            .overlay {
-                if let image {
-                    Image(uiImage: image).resizable().scaledToFill()
+        VStack(alignment: .leading, spacing: 5) {
+            Color(.secondarySystemBackground)
+                .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                .overlay {
+                    if let image {
+                        Image(uiImage: image).resizable().scaledToFill()
+                    }
                 }
+                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            if let caption {
+                Text(caption)
+                    .font(.caption)
+                    .lineLimit(2, reservesSpace: true)
+                    .multilineTextAlignment(.leading)
+                    .foregroundStyle(.primary)
             }
-            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            .task(id: asset.localIdentifier) {
-                image = await ImageLoader.thumbnail(for: asset)
-            }
+        }
+        .task(id: asset.localIdentifier) {
+            image = await ImageLoader.thumbnail(for: asset)
+        }
     }
 }
 
-/// A whole screenshot, sized to fit. Holds its shape while loading so nothing jumps.
+/// A whole screenshot at full quality. Never shows a blurry stand-in: it shows a spinner,
+/// then the real image, or says plainly that the image could not be loaded.
 struct Screenshot: View {
     let asset: PHAsset
+    var cornerRadius: CGFloat = 14
     @State private var image: UIImage?
+    @State private var didFail = false
 
     private var shape: CGFloat {
         asset.pixelHeight > 0 ? CGFloat(asset.pixelWidth) / CGFloat(asset.pixelHeight) : 9.0 / 19.5
@@ -59,17 +103,28 @@ struct Screenshot: View {
 
     var body: some View {
         ZStack {
-            Color.panel
+            Color(.secondarySystemBackground)
             if let image {
                 Image(uiImage: image).resizable()
+            } else if didFail {
+                VStack(spacing: 8) {
+                    Image(systemName: "icloud.slash").font(.title2)
+                    Text("Couldn't load this one from iCloud.")
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                }
+                .foregroundStyle(.secondary)
+                .padding()
             } else {
-                ProgressView().tint(Color.gold)
+                ProgressView()
             }
         }
         .aspectRatio(shape, contentMode: .fit)
-        .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
         .task(id: asset.localIdentifier) {
+            didFail = false
             image = await ImageLoader.screen(for: asset)
+            didFail = image == nil
         }
     }
 }
@@ -88,7 +143,7 @@ struct ZoomViewer: View {
             if let image {
                 ZoomableImage(image: image).ignoresSafeArea()
             } else {
-                ProgressView().tint(Color.gold).frame(maxWidth: .infinity, maxHeight: .infinity)
+                ProgressView().tint(.white).frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             Button {
                 dismiss()
@@ -185,8 +240,8 @@ struct Chip: View {
                 .font(.footnote.weight(.semibold))
                 .padding(.horizontal, 12)
                 .padding(.vertical, 7)
-                .background(isOn ? Color.gold : Color.white.opacity(0.10), in: Capsule())
-                .foregroundStyle(isOn ? Color.ink : Color.white)
+                .background(isOn ? AnyShapeStyle(.tint) : AnyShapeStyle(.fill.tertiary), in: Capsule())
+                .foregroundStyle(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isOn ? .isSelected : [])
@@ -204,8 +259,8 @@ private struct Toast: ViewModifier {
                     .font(.subheadline.weight(.semibold))
                     .padding(.horizontal, 16)
                     .padding(.vertical, 11)
-                    .background(Color.paper, in: Capsule())
-                    .foregroundStyle(Color.ink)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.12), radius: 10, y: 4)
                     .padding(.bottom, 24)
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .task(id: message) {

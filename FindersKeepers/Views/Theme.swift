@@ -1,21 +1,17 @@
 import SwiftUI
 import UIKit
 
-extension Color {
-    /// The deep blue behind everything.
-    static let wall = Color(red: 0.075, green: 0.125, blue: 0.231)
-    /// A slightly lighter blue for panels that sit on the wall.
-    static let panel = Color(red: 0.118, green: 0.180, blue: 0.310)
-    static let gold = Color(red: 0.965, green: 0.659, blue: 0.129)
-    static let paper = Color(red: 0.949, green: 0.929, blue: 0.886)
-    static let ink = Color(red: 0.047, green: 0.082, blue: 0.157)
-    static let quiet = Color.white.opacity(0.62)
-}
+// The app uses Apple's own colors and type, so it follows Light and Dark mode and the
+// text size set in Settings. The one accent color lives in Assets.xcassets (AccentColor).
 
-extension Font {
-    /// Tall, tight capitals for the few big moments.
-    static func poster(_ size: CGFloat) -> Font {
-        .system(size: size, weight: .black).width(.condensed)
+/// The three answers in the weekly look, and how each one looks.
+extension Verdict {
+    var color: Color {
+        switch self {
+        case .keep: .green
+        case .delete: .red
+        case .later: .gray
+        }
     }
 }
 
@@ -26,7 +22,6 @@ enum Haptics {
     static func soft() { UIImpactFeedbackGenerator(style: .soft).impactOccurred() }
     static func firm() { UIImpactFeedbackGenerator(style: .rigid).impactOccurred() }
     static func success() { UINotificationFeedbackGenerator().notificationOccurred(.success) }
-    static func warning() { UINotificationFeedbackGenerator().notificationOccurred(.warning) }
 }
 
 extension Date {
@@ -49,4 +44,12 @@ extension Settings {
 
 extension Card {
     var displayTitle: String { title.isEmpty ? "Untitled screenshot" : title }
+
+    /// The one fact most likely to tell you what this screenshot is, after its title.
+    var keyFact: String? {
+        if !address.isEmpty { return address }
+        if let date = dates.first { return date.formatted(.dateTime.weekday(.abbreviated).month(.abbreviated).day().hour().minute()) }
+        if !summary.isEmpty { return summary }
+        return nil
+    }
 }

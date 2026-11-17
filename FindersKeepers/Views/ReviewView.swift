@@ -1,7 +1,9 @@
 import Photos
 import SwiftUI
 
-/// The weekly look: one screenshot at a time. Swipe it or use the buttons.
+/// The weekly look: one screenshot at a time, shown at its real size.
+/// Swipe right to keep, left to delete, up for next week, or use the buttons.
+/// Tap the screenshot to hide the controls; double-tap or pinch to zoom.
 struct ReviewView: View {
     @EnvironmentObject private var store: Store
     @Environment(\.dismiss) private var dismiss
@@ -14,10 +16,14 @@ struct ReviewView: View {
     @State private var drag: CGSize = .zero
     @State private var armed: Verdict?
     @State private var isFlinging = false
+    @State private var showsControls = true
     @State private var didFinish = false
     @State private var zoomed: ScreenshotID?
     @State private var isDeleting = false
     @State private var deleteWasCancelled = false
+
+    /// How many screenshots ahead are fetched at full quality.
+    private static let lookahead = 3
 
     private struct Entry {
         let verdict: Verdict
@@ -31,22 +37,16 @@ struct ReviewView: View {
     private var isDeciding: Bool { index < queue.count }
 
     var body: some View {
-        ZStack {
-            Color.wall.ignoresSafeArea()
-            VStack(spacing: 12) {
-                topBar
-                if isDeciding {
-                    cardStack
-                    caption(for: queue[index])
-                    if !hasSeenSwipeHint { swipeHint }
-                    buttons
-                } else {
-                    summary
-                }
+        Group {
+            if isDeciding {
+                deciding
+            } else {
+                summary
             }
-            .padding(.horizontal)
-            .padding(.bottom, 8)
         }
+        .statusBarHidden()
+        .onAppear { prepareAhead() }
+        .onChange(of: index) { prepareAhead() }
         .fullScreenCover(item: $zoomed) { item in
             if let asset = store.asset(item.id) {
                 ZoomViewer(asset: asset)
@@ -54,124 +54,164 @@ struct ReviewView: View {
         }
     }
 
-    // MARK: - Top bar
+    // MARK: - Deciding
+
+    private var deciding: some View {
+        ZStack {
+            Color(.systemBackground).ignoresSafeArea()
+            stack
+            VStack(spacing: 0) {
+                if showsControls {
+                    topBar.transition(.move(edge: .top).combined(with: .opacity))
+                }
+                Spacer(minLength: 0)
+                if showsControls {
+                    bottomPanel(for: queue[index]).transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+            }
+        }
+        .animation(.easeInOut(duration: 0.2), value: showsControls)
+    }
+
+    /// The current screenshot, with the next one already loaded underneath it.
+    private var stack: some View {
+        ZStack {
+            ForEach(queue[index..<min(index + 2, queue.count)], id: \.localIdentifier) { asset in
+                let isFront = asset.localIdentifier == queue[index].localIdentifier
+                page(for: asset)
+                    .overlay { if isFront { stamp } }
+                    .offset(isFront ? drag : .zero)
+                    .rotationEffect(.degrees(isFront ? Double(drag.width) / 40 : 0), anchor: .bottom)
+                    .zIndex(isFront ? 1 : 0)
+                    .allowsHitTesting(isFront && !isFlinging)
+                    .accessibilityHidden(!isFront)
+            }
+        }
+    }
+
+    /// One screenshot, as wide as the screen, so it reads exactly as it did when you took it.
+    private func page(for asset: PHAsset) -> some View {
+        ZStack {
+            Color(.systemBackground)
+            Screenshot(asset: asset, cornerRadius: 0)
+        }
+        .ignoresSafeArea()
+        .contentShape(Rectangle())
+        .onTapGesture(count: 2) { zoomed = ScreenshotID(id: asset.localIdentifier) }
+        .onTapGesture { showsControls.toggle() }
+        .gesture(swipe)
+        .simultaneousGesture(
+            MagnifyGesture().onEnded { value in
+                if value.magnification > 1.15 { zoomed = ScreenshotID(id: asset.localIdentifier) }
+            }
+        )
+        .accessibilityElement()
+        .accessibilityLabel(store.card(asset.localIdentifier).displayTitle)
+        .accessibilityHint("Double-tap to zoom.")
+        .accessibilityAction(named: "Keep") { fling(.keep) }
+        .accessibilityAction(named: "Delete") { fling(.delete) }
+        .accessibilityAction(named: "Next week") { fling(.later) }
+    }
+
+    /// The word that appears on the screenshot once a drag is far enough to count.
+    @ViewBuilder
+    private var stamp: some View {
+        if let armed {
+            Label(armed.label, systemImage: armed.icon)
+                .font(.title2.weight(.bold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 10)
+                .background(armed.color, in: Capsule())
+                .shadow(color: .black.opacity(0.2), radius: 12, y: 4)
+                .transition(.scale(scale: 0.85).combined(with: .opacity))
+        }
+    }
 
     private var topBar: some View {
         HStack {
             Button {
                 close()
             } label: {
-                Image(systemName: "xmark").font(.headline).padding(8)
+                Image(systemName: "xmark")
             }
             .accessibilityLabel("Close")
             Spacer()
-            Text(isDeciding ? "\(index + 1) of \(queue.count)" : "Done")
-                .font(.footnote.weight(.bold))
-                .foregroundStyle(Color.gold)
+            Text("\(index + 1) of \(queue.count)")
+                .font(.subheadline.weight(.semibold).monospacedDigit())
                 .contentTransition(.numericText())
             Spacer()
             Button {
                 undo()
             } label: {
-                Image(systemName: "arrow.uturn.backward").font(.headline).padding(8)
+                Image(systemName: "arrow.uturn.backward")
             }
             .disabled(history.isEmpty || isFlinging)
             .accessibilityLabel("Undo")
         }
+        .font(.headline)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background(.bar)
     }
 
-    // MARK: - The card
-
-    /// The current screenshot with the next one waiting behind it.
-    private var cardStack: some View {
-        ZStack {
-            ForEach(queue[index..<min(index + 2, queue.count)], id: \.localIdentifier) { asset in
-                let isFront = asset.localIdentifier == queue[index].localIdentifier
-                Screenshot(asset: asset)
-                    .overlay { if isFront { stamp } }
-                    .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
-                    .scaleEffect(isFront ? 1 : 0.94)
-                    .opacity(isFront ? 1 : 0.5)
-                    .offset(isFront ? drag : CGSize(width: 0, height: 22))   // the next card peeks out below
-                    .rotationEffect(.degrees(isFront ? Double(drag.width) / 22 : 0))
-                    .zIndex(isFront ? 1 : 0)
-                    .allowsHitTesting(isFront && !isFlinging)
-                    .onTapGesture { zoomed = ScreenshotID(id: asset.localIdentifier) }
-                    .gesture(swipe)
-                    .accessibilityHidden(!isFront)
-                    .accessibilityLabel("Screenshot. Tap to zoom. Use the buttons below to decide.")
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.bottom, 22)
-    }
-
-    /// The word that appears on the card once you have dragged far enough to commit.
-    @ViewBuilder
-    private var stamp: some View {
-        if let armed {
-            Text(armed.stamp)
-                .font(.poster(40))
-                .foregroundStyle(armed.color)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 6)
-                .background(Color.ink.opacity(0.8), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(armed.color, lineWidth: 4))
-                .rotationEffect(.degrees(-10))
-                .transition(.scale(scale: 0.8).combined(with: .opacity))
-        }
-    }
-
-    private func caption(for asset: PHAsset) -> some View {
+    /// What the screenshot is, in large type, then the three choices.
+    private func bottomPanel(for asset: PHAsset) -> some View {
         let card = store.card(asset.localIdentifier)
         let details = [
             asset.creationDate.map { "\($0.shortDay) · \($0.ago)" },
             card.isRead ? CardGroup.named(card.group).name : nil,
             SignOff.snoozeNote(count: card.snoozeCount),
         ].compactMap { $0 }
-        return VStack(alignment: .leading, spacing: 3) {
-            Text(card.isRead ? card.displayTitle : "Reading…")
-                .font(.headline)
-                .lineLimit(2)
-            Text(details.joined(separator: " · "))
-                .font(.caption)
-                .foregroundStyle(Color.quiet)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-    }
 
-    private var swipeHint: some View {
-        Text("Swipe right to keep, left to delete, up for next week. Or use the buttons.")
-            .font(.caption)
-            .foregroundStyle(Color.quiet)
-            .frame(maxWidth: .infinity, alignment: .leading)
-    }
-
-    private var buttons: some View {
-        HStack(spacing: 10) {
-            ForEach([Verdict.delete, .later, .keep], id: \.self) { verdict in
-                Button {
-                    fling(verdict)
-                } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: verdict.icon).font(.title3).frame(height: 26)
-                        Text(verdict.label).font(.footnote.weight(.bold))
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 13)
-                    .background(verdict.color, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                    .foregroundStyle(verdict == .delete ? Color.white : Color.ink)
+        return VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(card.isRead ? card.displayTitle : "Reading…")
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(2)
+                if card.isRead, let fact = card.keyFact {
+                    Text(fact)
+                        .font(.subheadline)
+                        .lineLimit(1)
                 }
-                .buttonStyle(.plain)
-                .disabled(isFlinging)
+                Text(details.joined(separator: " · "))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if !hasSeenSwipeHint {
+                Text("Swipe right to keep, left to delete, up for next week. Tap the screenshot to see all of it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            HStack(spacing: 10) {
+                ForEach([Verdict.delete, .later, .keep], id: \.self) { verdict in
+                    Button {
+                        fling(verdict)
+                    } label: {
+                        Label(verdict.label, systemImage: verdict.icon)
+                            .font(.subheadline.weight(.semibold))
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(verdict.color)
+                    .controlSize(.large)
+                    .disabled(isFlinging)
+                }
             }
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 16)
+        .padding(.bottom, 8)
+        .background(.bar)
     }
 
-    // MARK: - Deciding
+    // MARK: - Gestures and decisions
 
     private var swipe: some Gesture {
-        DragGesture(minimumDistance: 12)
+        DragGesture(minimumDistance: 14)
             .onChanged { value in
                 guard !isFlinging else { return }
                 drag = value.translation
@@ -198,11 +238,11 @@ struct ReviewView: View {
     private func verdict(for translation: CGSize) -> Verdict? {
         if translation.width > 110 { return .keep }
         if translation.width < -110 { return .delete }
-        if translation.height < -130 { return .later }
+        if translation.height < -140, abs(translation.width) < 90 { return .later }
         return nil
     }
 
-    /// Sends the card off the screen, records the answer, and brings the next card forward.
+    /// Sends the screenshot off the screen, records the answer, and reveals the next one.
     private func fling(_ verdict: Verdict) {
         guard isDeciding, !isFlinging else { return }
         let asset = queue[index]
@@ -213,14 +253,16 @@ struct ReviewView: View {
         case .delete: Haptics.firm()
         case .later: Haptics.soft()
         }
-        withAnimation(.easeIn(duration: 0.18)) {
+        withAnimation(.easeIn(duration: 0.2)) {
             armed = verdict
             drag = verdict.exit
         }
         Task {
-            try? await Task.sleep(for: .milliseconds(190))
+            try? await Task.sleep(for: .milliseconds(210))
             history.append(Entry(verdict: verdict, step: store.decide(verdict, on: asset)))
-            withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+            var instantly = Transaction()
+            instantly.disablesAnimations = true
+            withTransaction(instantly) {
                 index += 1
                 drag = .zero
                 armed = nil
@@ -237,11 +279,21 @@ struct ReviewView: View {
         guard !isFlinging, let last = history.popLast() else { return }
         store.undo(last.step)
         Haptics.soft()
-        withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) {
+        let came = last.verdict.exit
+        var instantly = Transaction()
+        instantly.disablesAnimations = true
+        withTransaction(instantly) {
             index = max(0, index - 1)
-            drag = .zero
-            armed = nil
+            drag = came
         }
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            drag = .zero
+        }
+    }
+
+    private func prepareAhead() {
+        let upcoming = queue.dropFirst(index).prefix(Self.lookahead + 1)
+        ImageLoader.prepare(upcoming)
     }
 
     private func close() {
@@ -260,15 +312,18 @@ struct ReviewView: View {
     private var summary: some View {
         VStack(spacing: 14) {
             Spacer()
-            Text("DONE")
-                .font(.poster(80))
-                .foregroundStyle(Color.gold)
+            Image(systemName: "checkmark.circle")
+                .font(.system(size: 64, weight: .light))
+                .foregroundStyle(.green)
+                .symbolEffect(.bounce, value: didFinish)
+            Text("Done")
+                .font(.largeTitle.weight(.bold))
             Text(SignOff.line(kept: count(.keep), deleted: count(.delete), later: count(.later)))
-                .font(.title3.weight(.semibold))
+                .font(.title3)
                 .multilineTextAlignment(.center)
             Text("\(count(.keep)) kept · \(count(.later)) next week · \(count(.delete)) to delete")
                 .font(.subheadline)
-                .foregroundStyle(Color.quiet)
+                .foregroundStyle(.secondary)
 
             if !store.markedForDelete.isEmpty {
                 Button(role: .destructive) {
@@ -286,7 +341,7 @@ struct ReviewView: View {
                      ? "Cancelled. They are still marked, and wait on the Weekly tab."
                      : "iOS asks you once for the lot. Recently Deleted keeps them for 30 days.")
                     .font(.footnote)
-                    .foregroundStyle(Color.quiet)
+                    .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
             }
 
@@ -296,10 +351,10 @@ struct ReviewView: View {
             if store.looksCompleted > 0 {
                 Text("Look no. \(store.looksCompleted)")
                     .font(.caption)
-                    .foregroundStyle(Color.quiet)
+                    .foregroundStyle(.secondary)
             }
         }
-        .padding(.horizontal, 12)
+        .padding(.horizontal, 28)
     }
 
     private func deleteMarked() {
@@ -317,21 +372,13 @@ struct ReviewView: View {
     }
 }
 
-/// How each answer looks and behaves in the look.
+/// How each answer reads and moves in the look.
 private extension Verdict {
     var label: String {
         switch self {
         case .keep: "Keep"
         case .delete: "Delete"
         case .later: "Next week"
-        }
-    }
-
-    var stamp: String {
-        switch self {
-        case .keep: "KEEP"
-        case .delete: "DELETE"
-        case .later: "NEXT WEEK"
         }
     }
 
@@ -343,20 +390,12 @@ private extension Verdict {
         }
     }
 
-    var color: Color {
-        switch self {
-        case .keep: .gold
-        case .delete: Color(red: 0.84, green: 0.22, blue: 0.20)
-        case .later: .paper
-        }
-    }
-
-    /// Where the card flies to: right for keep, left for delete, up for next week.
+    /// Where the screenshot flies to: right for keep, left for delete, up for next week.
     var exit: CGSize {
         switch self {
-        case .keep: CGSize(width: 700, height: 40)
-        case .delete: CGSize(width: -700, height: 40)
-        case .later: CGSize(width: 0, height: -1_100)
+        case .keep: CGSize(width: 800, height: 60)
+        case .delete: CGSize(width: -800, height: 60)
+        case .later: CGSize(width: 0, height: -1_300)
         }
     }
 }

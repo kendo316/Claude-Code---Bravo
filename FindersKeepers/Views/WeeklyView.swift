@@ -15,16 +15,18 @@ struct WeeklyView: View {
             ScrollView {
                 VStack(spacing: 18) {
                     if due == 0 {
-                        Text("ALL CAUGHT UP")
-                            .font(.poster(44))
-                            .foregroundStyle(Color.gold)
+                        Image(systemName: "checkmark.circle")
+                            .font(.system(size: 64, weight: .light))
+                            .foregroundStyle(.green)
                             .padding(.top, 60)
+                        Text("All caught up")
+                            .font(.title.weight(.bold))
                         Text("Nothing is waiting. Go take more screenshots.")
-                            .foregroundStyle(Color.quiet)
+                            .foregroundStyle(.secondary)
                     } else {
                         Text("\(batch)")
-                            .font(.poster(120))
-                            .foregroundStyle(Color.gold)
+                            .font(.system(size: 96, weight: .bold, design: .rounded))
+                            .foregroundStyle(.tint)
                             .contentTransition(.numericText())
                             .padding(.top, 36)
                         Text(batch == 1 ? "old screenshot is ready for a look." : "of your oldest screenshots are ready for a look.")
@@ -32,7 +34,7 @@ struct WeeklyView: View {
                         if due > batch {
                             Text("\(due) are in line altogether.")
                                 .font(.footnote)
-                                .foregroundStyle(Color.quiet)
+                                .foregroundStyle(.secondary)
                         }
                         Button {
                             Haptics.soft()
@@ -41,7 +43,6 @@ struct WeeklyView: View {
                             Text("Start the look").frame(maxWidth: .infinity)
                         }
                         .buttonStyle(.borderedProminent)
-                        .foregroundStyle(Color.ink)
                         .controlSize(.large)
                         .padding(.top, 6)
                     }
@@ -53,14 +54,13 @@ struct WeeklyView: View {
                     if let last = store.lastLookAt {
                         Text("Last look \(last.ago). \(store.looksCompleted) finished so far.")
                             .font(.footnote)
-                            .foregroundStyle(Color.quiet)
+                            .foregroundStyle(.secondary)
                             .padding(.top, 8)
                     }
                 }
                 .padding(.horizontal, 28)
                 .frame(maxWidth: .infinity)
             }
-            .background(Color.wall.ignoresSafeArea())
             .navigationTitle("Weekly")
             .fullScreenCover(isPresented: $isLooking) {
                 ReviewView(queue: store.lookQueue())
@@ -83,7 +83,7 @@ struct WeeklyView: View {
                 .font(.headline)
             Text("iOS asks you once for the lot. They then sit in Recently Deleted for 30 days.")
                 .font(.footnote)
-                .foregroundStyle(Color.quiet)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 10) {
                 Button("Unmark all") {
@@ -103,7 +103,7 @@ struct WeeklyView: View {
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Color.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(.top, 10)
     }
 
@@ -114,7 +114,7 @@ struct WeeklyView: View {
                 .font(.headline)
             Text("One notification, \(store.settings.reminderDescription). Change the day and time under More.")
                 .font(.footnote)
-                .foregroundStyle(Color.quiet)
+                .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             HStack(spacing: 10) {
                 Button("Not now") { hasDeclinedReminder = true }
@@ -124,12 +124,11 @@ struct WeeklyView: View {
                     store.settings.reminderOn = true
                 }
                 .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color.ink)
             }
         }
         .padding(16)
         .frame(maxWidth: .infinity)
-        .background(Color.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(.top, 10)
     }
 

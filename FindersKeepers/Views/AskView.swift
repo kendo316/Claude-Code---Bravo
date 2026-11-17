@@ -22,7 +22,7 @@ struct AskView: View {
                         .submitLabel(.search)
                         .onSubmit { ask() }
                         .padding(12)
-                        .background(Color.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     Button {
                         ask()
@@ -30,7 +30,6 @@ struct AskView: View {
                         Text(isThinking ? "Thinking…" : "Ask").frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .foregroundStyle(Color.ink)
                     .controlSize(.large)
                     .disabled(isThinking || trimmed.isEmpty)
 
@@ -40,7 +39,7 @@ struct AskView: View {
                     if !sources.isEmpty {
                         Text("FROM THESE")
                             .font(.caption.weight(.bold))
-                            .foregroundStyle(Color.gold)
+                            .foregroundStyle(.secondary)
                         ForEach(sources) { card in
                             Button {
                                 opened = ScreenshotID(id: card.id)
@@ -55,7 +54,7 @@ struct AskView: View {
                                     Spacer()
                                     Image(systemName: "chevron.right")
                                         .font(.footnote)
-                                        .foregroundStyle(Color.quiet)
+                                        .foregroundStyle(.secondary)
                                 }
                             }
                             .buttonStyle(.plain)
@@ -64,7 +63,6 @@ struct AskView: View {
                 }
                 .padding()
             }
-            .background(Color.wall.ignoresSafeArea())
             .navigationTitle("Ask")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

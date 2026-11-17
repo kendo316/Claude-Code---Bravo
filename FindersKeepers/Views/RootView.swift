@@ -41,13 +41,14 @@ private struct AccessView: View {
     var body: some View {
         VStack(spacing: 20) {
             Spacer()
-            Text("FINDERS\nKEEPERS")
-                .font(.poster(56))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(Color.gold)
+            Image(systemName: "photo.stack")
+                .font(.system(size: 56))
+                .foregroundStyle(.tint)
+            Text("Finders Keepers")
+                .font(.largeTitle.weight(.bold))
             Text("To sort your screenshots, the app needs to see your photos. Everything is read on this iPhone. Nothing is uploaded, and there is no account.")
                 .multilineTextAlignment(.center)
-                .foregroundStyle(Color.quiet)
+                .foregroundStyle(.secondary)
                 .padding(.horizontal, 32)
 
             if store.access == .notDetermined {
@@ -55,23 +56,20 @@ private struct AccessView: View {
                     Task { await store.requestAccess() }
                 }
                 .buttonStyle(.borderedProminent)
-                .foregroundStyle(Color.ink)
                 .controlSize(.large)
             } else {
                 Button("Open Settings") { openSettings() }
                     .buttonStyle(.borderedProminent)
-                    .foregroundStyle(Color.ink)
                     .controlSize(.large)
                 Text("Photos access is off for Finders Keepers. Turn it on under Photos, then come back.")
                     .font(.footnote)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(Color.quiet)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal, 32)
             }
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.wall.ignoresSafeArea())
     }
 }
 

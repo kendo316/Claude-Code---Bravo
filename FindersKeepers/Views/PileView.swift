@@ -11,7 +11,7 @@ struct PileView: View {
     @State private var isAsking = false
     @State private var toast: String?
 
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 6), count: 3)
+    private let columns = Array(repeating: GridItem(.flexible(), spacing: 10, alignment: .top), count: 3)
 
     var body: some View {
         NavigationStack {
@@ -24,7 +24,6 @@ struct PileView: View {
                 }
                 .padding(.vertical, 8)
             }
-            .background(Color.wall.ignoresSafeArea())
             .navigationTitle("Pile")
             .searchable(text: $query, prompt: "Search titles and the words inside")
             .refreshable { store.reload() }
@@ -58,10 +57,10 @@ struct PileView: View {
     private var statusLines: some View {
         if let status = store.readingStatus {
             HStack(spacing: 8) {
-                ProgressView().tint(Color.gold)
+                ProgressView()
                 Text(status)
                     .font(.footnote)
-                    .foregroundStyle(Color.quiet)
+                    .foregroundStyle(.secondary)
                     .contentTransition(.numericText())
             }
             .padding(.horizontal)
@@ -82,7 +81,7 @@ struct PileView: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("COMING UP")
                     .font(.caption.weight(.bold))
-                    .foregroundStyle(Color.gold)
+                    .foregroundStyle(.secondary)
                     .padding(.horizontal)
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
@@ -98,10 +97,10 @@ struct PileView: View {
                                         .lineLimit(2)
                                         .multilineTextAlignment(.leading)
                                 }
-                                .foregroundStyle(Color.ink)
+                                .foregroundStyle(.primary)
                                 .frame(width: 140, alignment: .leading)
                                 .padding(10)
-                                .background(Color.paper, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                             }
                             .buttonStyle(.plain)
                         }
@@ -131,26 +130,32 @@ struct PileView: View {
         let shown = store.pile(matching: query, in: group)
         if shown.isEmpty {
             Text(emptyMessage)
-                .foregroundStyle(Color.quiet)
+                .foregroundStyle(.secondary)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 40)
                 .padding(.horizontal, 32)
                 .multilineTextAlignment(.center)
         } else {
-            LazyVGrid(columns: columns, spacing: 6) {
+            LazyVGrid(columns: columns, spacing: 14) {
                 ForEach(shown, id: \.localIdentifier) { asset in
                     Button {
                         opened = ScreenshotID(id: asset.localIdentifier)
                     } label: {
-                        Thumbnail(asset: asset)
+                        Thumbnail(asset: asset, caption: caption(for: asset))
                     }
                     .buttonStyle(.plain)
                     .accessibilityLabel(store.card(asset.localIdentifier).displayTitle)
                     .contextMenu { quickActions(for: asset) }
                 }
             }
-            .padding(.horizontal, 6)
+            .padding(.horizontal)
         }
+    }
+
+    /// The title under a tile. Blank until the screenshot has been read, so nothing flickers.
+    private func caption(for asset: PHAsset) -> String {
+        let card = store.card(asset.localIdentifier)
+        return card.isRead ? card.displayTitle : " "
     }
 
     private var emptyMessage: String {

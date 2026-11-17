@@ -76,8 +76,6 @@ struct MoreView: View {
                         }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(Color.wall.ignoresSafeArea())
             .navigationTitle("More")
             .confirmationDialog("Read every screenshot again?", isPresented: $isConfirmingReread, titleVisibility: .visible) {
                 Button("Read again") { store.readEverythingAgain() }
@@ -117,15 +115,14 @@ private struct FirstScreenshotView: View {
 
     var body: some View {
         VStack(spacing: 14) {
-            Text("WHERE IT ALL BEGAN")
-                .font(.poster(34))
-                .foregroundStyle(Color.gold)
+            Text("Where it all began")
+                .font(.title2.weight(.bold))
                 .padding(.top, 28)
             if let first = store.screenshots.first {
                 if let taken = first.creationDate {
                     Text("The oldest screenshot still on this phone. \(taken.shortDay), \(taken.ago).")
                         .font(.subheadline)
-                        .foregroundStyle(Color.quiet)
+                        .foregroundStyle(.secondary)
                         .multilineTextAlignment(.center)
                 }
                 Screenshot(asset: first)
@@ -135,6 +132,5 @@ private struct FirstScreenshotView: View {
         }
         .padding(.horizontal, 24)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.wall.ignoresSafeArea())
     }
 }

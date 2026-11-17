@@ -44,14 +44,14 @@ struct DetailView: View {
                         if let taken = store.asset(id)?.creationDate {
                             Text("\(taken.shortDay) · \(taken.ago)")
                                 .font(.footnote)
-                                .foregroundStyle(Color.quiet)
+                                .foregroundStyle(.secondary)
                         }
                     }
 
                     if let keptAt = card.keptAt {
                         Label("Kept \(keptAt.shortDay)", systemImage: "checkmark.circle.fill")
                             .font(.footnote.weight(.semibold))
-                            .foregroundStyle(Color.gold)
+                            .foregroundStyle(.green)
                     }
 
                     if !card.summary.isEmpty {
@@ -62,27 +62,26 @@ struct DetailView: View {
 
                     TextField("Add a note", text: store.binding(id, \.note), axis: .vertical)
                         .padding(12)
-                        .background(Color.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
 
                     if !card.text.isEmpty {
                         VStack(alignment: .leading, spacing: 6) {
                             Text("TEXT IN THIS SCREENSHOT")
                                 .font(.caption.weight(.bold))
-                                .foregroundStyle(Color.gold)
+                                .foregroundStyle(.secondary)
                             Text(card.text)
                                 .font(.footnote.monospaced())
-                                .foregroundStyle(Color.quiet)
+                                .foregroundStyle(.secondary)
                                 .textSelection(.enabled)
                         }
                     } else if !card.isRead {
                         Text("Not read yet. It will be soon.")
                             .font(.footnote)
-                            .foregroundStyle(Color.quiet)
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .padding()
             }
-            .background(Color.wall.ignoresSafeArea())
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
