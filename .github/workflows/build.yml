@@ -37,3 +37,16 @@ jobs:
       - name: Full log on failure
         if: failure()
         run: tail -150 build.log
+  screens:
+    name: Run in a simulator
+    runs-on: xcode-27
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash tools/simulator_shots.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screens
+          path: shots
+          retention-days: 7

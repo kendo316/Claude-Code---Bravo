@@ -6,6 +6,7 @@ struct WeeklyView: View {
     @State private var isLooking = false
     @State private var isDeleting = false
     @State private var toast: String?
+    @AppStorage("hasDeclinedReminder") private var hasDeclinedReminder = false
 
     var body: some View {
         let due = store.dueCount
@@ -46,6 +47,8 @@ struct WeeklyView: View {
                     }
 
                     if !store.markedForDelete.isEmpty { markedPanel }
+                    if !store.settings.reminderOn, !hasDeclinedReminder { reminderOffer }
+                    if store.settings.reminderOn, store.remindersBlocked { remindersBlockedNote }
 
                     if let last = store.lastLookAt {
                         Text("Last look \(last.ago). \(store.looksCompleted) finished so far.")
@@ -63,6 +66,13 @@ struct WeeklyView: View {
                 ReviewView(queue: store.lookQueue())
             }
             .toast($toast)
+            #if DEBUG
+            .task {
+                guard DebugLaunch.opensLook else { return }
+                try? await Task.sleep(for: .seconds(2))
+                isLooking = true
+            }
+            #endif
         }
     }
 
@@ -95,6 +105,40 @@ struct WeeklyView: View {
         .frame(maxWidth: .infinity)
         .background(Color.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .padding(.top, 10)
+    }
+
+    /// The weekly nudge is offered here, where it makes sense, instead of at first launch.
+    private var reminderOffer: some View {
+        VStack(spacing: 10) {
+            Text("Want a weekly nudge?")
+                .font(.headline)
+            Text("One notification, \(store.settings.reminderDescription). Change the day and time under More.")
+                .font(.footnote)
+                .foregroundStyle(Color.quiet)
+                .multilineTextAlignment(.center)
+            HStack(spacing: 10) {
+                Button("Not now") { hasDeclinedReminder = true }
+                    .buttonStyle(.bordered)
+                Button("Remind me") {
+                    Haptics.soft()
+                    store.settings.reminderOn = true
+                }
+                .buttonStyle(.borderedProminent)
+                .foregroundStyle(Color.ink)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity)
+        .background(Color.panel, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.top, 10)
+    }
+
+    private var remindersBlockedNote: some View {
+        Button("Notifications are off for this app, so the reminder can't reach you. Open Settings.") {
+            openSettings()
+        }
+        .font(.footnote)
+        .multilineTextAlignment(.center)
     }
 
     private func deleteMarked() {

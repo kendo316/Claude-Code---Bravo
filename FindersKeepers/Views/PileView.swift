@@ -41,6 +41,14 @@ struct PileView: View {
             .sheet(item: $opened) { DetailView(id: $0.id) }
             .sheet(isPresented: $isAsking) { AskView() }
             .toast($toast)
+            #if DEBUG
+            .task {
+                if let search = DebugLaunch.searchText { query = search }
+                guard DebugLaunch.opensNewest else { return }
+                try? await Task.sleep(for: .seconds(2))
+                opened = store.screenshots.last.map { ScreenshotID(id: $0.localIdentifier) }
+            }
+            #endif
         }
     }
 

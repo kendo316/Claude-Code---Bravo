@@ -37,6 +37,16 @@ extension Date {
     var ago: String { formatted(.relative(presentation: .numeric, unitsStyle: .abbreviated)) }
 }
 
+extension Settings {
+    /// "Sunday at 7:00 PM"
+    var reminderDescription: String {
+        let days = Calendar.current.weekdaySymbols
+        let day = days.indices.contains(reminderWeekday - 1) ? days[reminderWeekday - 1] : "Sunday"
+        let time = Calendar.current.date(from: DateComponents(hour: reminderHour, minute: reminderMinute)) ?? Date()
+        return "\(day) at \(time.formatted(date: .omitted, time: .shortened))"
+    }
+}
+
 extension Card {
     var displayTitle: String { title.isEmpty ? "Untitled screenshot" : title }
 }

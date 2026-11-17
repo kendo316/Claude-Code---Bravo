@@ -4,7 +4,8 @@ import Foundation
 struct Settings: Codable, Equatable {
     var batchSize = 25
     var resurfaceAfterDays = 180
-    var reminderOn = true
+    /// Off until asked for, so the notification prompt appears only when you choose it.
+    var reminderOn = false
     /// 1 is Sunday, 7 is Saturday.
     var reminderWeekday = 1
     var reminderHour = 19
@@ -16,7 +17,7 @@ struct Settings: Codable, Equatable {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         batchSize = values.value(.batchSize, or: 25)
         resurfaceAfterDays = values.value(.resurfaceAfterDays, or: 180)
-        reminderOn = values.value(.reminderOn, or: true)
+        reminderOn = values.value(.reminderOn, or: false)
         reminderWeekday = values.value(.reminderWeekday, or: 1)
         reminderHour = values.value(.reminderHour, or: 19)
         reminderMinute = values.value(.reminderMinute, or: 0)
