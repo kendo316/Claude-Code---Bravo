@@ -191,9 +191,12 @@ struct ReviewView: View {
                     Button {
                         fling(verdict)
                     } label: {
-                        Label(verdict.label, systemImage: verdict.icon)
-                            .font(.subheadline.weight(.semibold))
-                            .frame(maxWidth: .infinity)
+                        VStack(spacing: 4) {
+                            Image(systemName: verdict.icon).font(.body.weight(.semibold))
+                            Text(verdict.label).font(.footnote.weight(.semibold)).lineLimit(1)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 2)
                     }
                     .buttonStyle(.borderedProminent)
                     .tint(verdict.color)
