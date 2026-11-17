@@ -70,6 +70,9 @@ final class Store: ObservableObject {
         if access == .notDetermined {
             access = await PhotoLibrary.requestAccess()
         }
+        #if DEBUG
+        if hasAccess { await DebugLaunch.importFixturesIfAsked() }
+        #endif
         reload()
         await applyReminder()
     }

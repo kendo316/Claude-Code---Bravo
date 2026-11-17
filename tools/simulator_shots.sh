@@ -33,18 +33,16 @@ xcodebuild -project FindersKeepers.xcodeproj -scheme FindersKeepers -configurati
 APP=build/Build/Products/Debug-iphonesimulator/FindersKeepers.app
 test -d "$APP"
 
-step "adding the made-up screenshots to Photos"
-# addmedia can hang on a fresh simulator until Photos has started once, so start it first,
-# then add the images one at a time, retrying each once.
-limit 60 xcrun simctl launch "$UDID" com.apple.mobileslideshow || true
-sleep 20
-limit 30 xcrun simctl terminate "$UDID" com.apple.mobileslideshow || true
-for f in Tests/Fixtures/*.png; do
-  limit 60 xcrun simctl addmedia "$UDID" "$f" || { sleep 5; limit 60 xcrun simctl addmedia "$UDID" "$f" || echo "could not add $f"; }
-done
 step "installing"
 limit 120 xcrun simctl install "$UDID" "$APP"
 limit 60 xcrun simctl privacy "$UDID" grant photos "$BUNDLE"
+
+# simctl addmedia hangs on current runner images, so the debug build imports the
+# made-up screenshots itself from its Documents folder (see DebugLaunch.importFixturesIfAsked).
+step "handing the made-up screenshots to the app"
+DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
+mkdir -p "$DATA/Documents/fixtures"
+cp Tests/Fixtures/*.png "$DATA/Documents/fixtures/"
 limit 30 xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 || true
 
 shoot() {   # shoot <name> <seconds to wait> [launch options...]
@@ -56,7 +54,7 @@ shoot() {   # shoot <name> <seconds to wait> [launch options...]
   limit 60 xcrun simctl io "$UDID" screenshot "shots/$name.png" || true
 }
 
-shoot 1-pile 45
+shoot 1-pile 50 -debugImport YES
 shoot 2-search 8 -debugSearch tbsp
 shoot 3-detail 10 -debugDetail YES
 shoot 4-weekly 8 -debugTab weekly
@@ -68,7 +66,6 @@ shoot 8-pile-dark 8
 limit 30 xcrun simctl ui "$UDID" appearance light || true
 
 # What the app read from each made-up screenshot.
-DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
 cp "$DATA/Library/Application Support/cards.json" shots/cards.json 2>/dev/null || echo "no cards.json yet"
 python3 - <<'PY'
 import json, pathlib

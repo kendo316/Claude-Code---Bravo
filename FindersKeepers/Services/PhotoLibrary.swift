@@ -36,6 +36,14 @@ enum PhotoLibrary {
                 if asset.mediaSubtypes.contains(.photoScreenshot) { found.append(asset) }
             }
         }
+        #if DEBUG
+        let known = Set(found.map(\.localIdentifier))
+        let fixtures = DebugLaunch.fixtureIDs.filter { !known.contains($0) }
+        if !fixtures.isEmpty {
+            PHAsset.fetchAssets(withLocalIdentifiers: fixtures, options: nil).enumerateObjects { asset, _, _ in found.append(asset) }
+            found.sort { ($0.creationDate ?? .distantPast) < ($1.creationDate ?? .distantPast) }
+        }
+        #endif
         return found
     }
 

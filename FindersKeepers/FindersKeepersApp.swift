@@ -47,6 +47,8 @@ final class Router: ObservableObject {
 }
 
 #if DEBUG
+import Photos
+
 /// Launch options used only by the automated screenshot run (tools/simulator_shots.sh).
 /// None of this is compiled into the build that goes on a phone through TestFlight.
 enum DebugLaunch {
@@ -60,5 +62,34 @@ enum DebugLaunch {
     static var opensLook: Bool { UserDefaults.standard.bool(forKey: "debugLook") }
     static var opensNewest: Bool { UserDefaults.standard.bool(forKey: "debugDetail") }
     static var searchText: String? { UserDefaults.standard.string(forKey: "debugSearch") }
+
+    /// Photos identifiers of the made-up screenshots imported by `importFixturesIfAsked`.
+    static var fixtureIDs: [String] { UserDefaults.standard.stringArray(forKey: "debugFixtureIDs") ?? [] }
+
+    /// Moves the test images from Documents/fixtures into Photos, once, and remembers their identifiers
+    /// so they count as screenshots even if the simulator does not tag them as such.
+    static func importFixturesIfAsked() async {
+        guard UserDefaults.standard.bool(forKey: "debugImport") else { return }
+        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("fixtures")
+        let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
+            .filter { $0.pathExtension.lowercased() == "png" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !files.isEmpty else { return }
+        let created = IdentifierBox()
+        try? await PHPhotoLibrary.shared().performChanges {
+            for file in files {
+                if let id = PHAssetCreationRequest.creationRequestForAssetFromImage(atFileURL: file)?
+                    .placeholderForCreatedAsset?.localIdentifier {
+                    created.ids.append(id)
+                }
+            }
+        }
+        UserDefaults.standard.set(fixtureIDs + created.ids, forKey: "debugFixtureIDs")
+        for file in files { try? FileManager.default.removeItem(at: file) }
+    }
+
+    private final class IdentifierBox: @unchecked Sendable {
+        var ids: [String] = []
+    }
 }
 #endif
