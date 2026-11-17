@@ -21,10 +21,10 @@ SHOTS = [
     ("4-concert", "2026:11:10 09:15:27", (18, 18, 24), (240, 240, 240), "Night Owls Quartet", [
         "Live at The Lantern Room", "", "Friday, December 11, 2026 at 8:00 PM", "Doors 7:00 PM", "",
         "123 Main Street", "Columbia, MO 65201", "", "Tickets: https://example.com/tickets", "General admission $25"]),
-    ("5-thread", "2026:11:14 22:31:09", (255, 255, 255), (20, 20, 20), "Group chat", [
+    ("5-thread", "2026:11:08 22:31:09", (255, 255, 255), (20, 20, 20), "Group chat", [
         "Did you see the size of that zucchini", "haha it needs its own zip code", "lol bring it Saturday",
         "Delivered"]),
-    ("6-plain", "2026:11:16 07:02:55", (32, 60, 92), (220, 230, 240), "", ["9:41", "5G"]),
+    ("6-plain", "2020:03:01 07:02:55", (32, 60, 92), (220, 230, 240), "", ["9:41", "5G"]),
 ]
 
 XMP = """<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">

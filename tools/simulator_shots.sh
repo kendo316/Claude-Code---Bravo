@@ -55,6 +55,10 @@ shoot 3-detail 10 -debugDetail YES
 shoot 4-weekly 8 -debugTab weekly
 shoot 5-look 12 -debugTab weekly -debugLook YES
 shoot 6-more 8 -debugTab more
+limit 30 xcrun simctl ui "$UDID" appearance dark || true
+shoot 7-look-dark 12 -debugTab weekly -debugLook YES
+shoot 8-pile-dark 8
+limit 30 xcrun simctl ui "$UDID" appearance light || true
 
 # What the app read from each made-up screenshot.
 DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)

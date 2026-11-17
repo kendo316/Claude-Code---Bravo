@@ -55,7 +55,7 @@ struct DetailView: View {
                     }
 
                     if !card.summary.isEmpty {
-                        Text(card.summary).foregroundStyle(.white.opacity(0.88))
+                        Text(card.summary)
                     }
 
                     facts(for: card)
