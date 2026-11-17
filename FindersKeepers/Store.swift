@@ -44,6 +44,8 @@ final class Store: ObservableObject {
     private var assetsByID: [String: PHAsset] = [:]
     private var searchTextByID: [String: String] = [:]
     private var couldNotRead: Set<String> = []
+    private var couldNotTitle: Set<String> = []
+    private var takenOutOfAlbum: Set<String> = []
     private var observer: LibraryObserver?
     private var readTask: Task<Void, Never>?
     private var saveTask: Task<Void, Never>?
@@ -89,6 +91,7 @@ final class Store: ObservableObject {
         orderedIDs = screenshots.map(\.localIdentifier)
         assetsByID = Dictionary(zip(orderedIDs, screenshots), uniquingKeysWith: { first, _ in first })
         forgetScreenshotsThatAreGone()
+        adoptKeptAlbum()
         readCount = orderedIDs.filter { cards[$0]?.isRead == true }.count
         startReading()
     }
@@ -111,6 +114,20 @@ final class Store: ObservableObject {
         if stillMarked.count != markedForDelete.count { markedForDelete = stillMarked }
     }
 
+    /// The "Finders Keepers" album in Photos is the lasting record of what was kept.
+    /// If this app's own file is ever lost (a new phone, a reinstall), anything in the album counts as kept again.
+    /// It also means adding a screenshot to that album in Photos keeps it here.
+    private func adoptKeptAlbum() {
+        guard access == .authorized else { return }
+        let now = Date()
+        for id in PhotoLibrary.keptAlbumIDs() {
+            let isUndecidedHere = assetsByID[id] != nil && cards[id]?.keptAt == nil
+            if isUndecidedHere, !takenOutOfAlbum.contains(id), !markedForDelete.contains(id) {
+                update(id) { $0.keptAt = now }
+            }
+        }
+    }
+
     func asset(_ id: String) -> PHAsset? {
         assetsByID[id]
     }
@@ -130,56 +147,107 @@ final class Store: ObservableObject {
 
     // MARK: - Reading screenshots
 
-    /// Reads unread screenshots one at a time while the app is open.
-    private func startReading() {
-        guard readTask == nil, hasAccess, nextUnread() != nil else { return }
-        isReading = true
-        readTask = Task { [weak self] in await self?.readUntilDone() }
+    private enum Job {
+        case read(PHAsset)
+        case title(String)
     }
 
-    private func readUntilDone() async {
-        while let asset = nextUnread() {
-            let id = asset.localIdentifier
-            guard let reading = await ScreenshotReader.read(asset) else {
-                couldNotRead.insert(id)      // skip for now, try again next launch
-                continue
+    /// Works through the backlog while the app is open, in two passes.
+    /// First every screenshot's words are read, which is quick and makes search work.
+    /// Then the on-device model writes a title for each, which is slower.
+    private func startReading() {
+        guard readTask == nil, hasAccess, nextJob() != nil else { return }
+        isReading = true
+        readTask = Task { [weak self] in await self?.workUntilDone() }
+    }
+
+    private func workUntilDone() async {
+        while let job = nextJob() {
+            switch job {
+            case .read(let asset): await read(asset)
+            case .title(let id): await writeTitle(for: id)
             }
-            let wasRead = cards[id]?.isRead == true
-            update(id) { card in
-                if !card.isEdited {
-                    card.title = reading.title
-                    card.group = reading.group
-                }
-                card.summary = reading.summary
-                card.text = reading.text
-                card.address = reading.facts.address
-                card.links = reading.facts.links
-                card.dates = reading.facts.dates
-                card.isRead = true
-            }
-            if !wasRead, assetsByID[id] != nil { readCount += 1 }
         }
         isReading = false
         readTask = nil
         saveNow()
     }
 
-    /// This week's batch comes first, then the newest, since recent screenshots are the ones you search for.
-    private func nextUnread() -> PHAsset? {
-        func needsReading(_ id: String) -> Bool {
-            cards[id]?.isRead != true && !couldNotRead.contains(id) && !markedForDelete.contains(id)
+    private func nextJob() -> Job? {
+        if let asset = firstNeeding({ cards[$0]?.isRead != true && !couldNotRead.contains($0) }).flatMap({ assetsByID[$0] }) {
+            return .read(asset)
         }
-        let id = lookQueueIDs().first(where: needsReading) ?? orderedIDs.last(where: needsReading)
-        return id.flatMap { assetsByID[$0] }
+        guard OnDeviceModel.isAvailable else { return nil }
+        return firstNeeding { cards[$0]?.isRead == true && cards[$0]?.isTitled == false && !couldNotTitle.contains($0) }
+            .map(Job.title)
+    }
+
+    /// This week's batch comes first, then the newest, since recent screenshots are the ones you search for.
+    private func firstNeeding(_ needsWork: (String) -> Bool) -> String? {
+        func isCandidate(_ id: String) -> Bool { !markedForDelete.contains(id) && needsWork(id) }
+        return lookQueueIDs().first(where: isCandidate) ?? orderedIDs.last(where: isCandidate)
+    }
+
+    private func read(_ asset: PHAsset) async {
+        let id = asset.localIdentifier
+        guard let reading = await ScreenshotReader.read(asset) else {
+            couldNotRead.insert(id)      // skip for now, try again next launch
+            return
+        }
+        let wasRead = cards[id]?.isRead == true
+        update(id) { card in
+            if !card.isEdited {
+                card.title = reading.title
+                card.group = reading.group
+            }
+            card.text = reading.text
+            card.address = reading.facts.address
+            card.links = reading.facts.links
+            card.dates = reading.facts.dates
+            card.isRead = true
+            card.isTitled = reading.text.count < OnDeviceModel.minimumCharacters
+        }
+        if !wasRead, assetsByID[id] != nil { readCount += 1 }
+    }
+
+    private func writeTitle(for id: String) async {
+        guard let text = cards[id]?.text, let filing = await OnDeviceModel.file(text) else {
+            couldNotTitle.insert(id)     // skip for now, try again next launch
+            return
+        }
+        update(id) { card in
+            if !card.isEdited {
+                card.title = filing.title
+                card.group = filing.group
+            }
+            card.summary = filing.summary
+            card.isTitled = true
+        }
+    }
+
+    /// A line for the Pile describing the work in progress, or nil when there is none.
+    var readingStatus: String? {
+        guard isReading else { return nil }
+        let total = orderedIDs.count
+        if readCount < total {
+            return "Reading \(readCount) of \(total). Search fills in as it goes."
+        }
+        return "Writing titles. \(titledCount) of \(total) done."
+    }
+
+    var titledCount: Int {
+        orderedIDs.filter { cards[$0]?.isTitled == true }.count
     }
 
     func readEverythingAgain() {
         cards = cards.mapValues { card in
             var unread = card
             unread.isRead = false
+            unread.isTitled = false
             return unread
         }
         couldNotRead = []
+        couldNotTitle = []
         readCount = 0
         scheduleSave()
         startReading()
@@ -218,6 +286,7 @@ final class Store: ObservableObject {
                 card.keptAt = now
                 card.snoozedAt = nil
             }
+            takenOutOfAlbum.remove(id)
             if step.addedToAlbum { changeAlbum { await PhotoLibrary.setKept(true, asset) } }
         case .later:
             update(id) { card in
@@ -240,6 +309,7 @@ final class Store: ObservableObject {
             markedForDelete.remove(step.id)
         }
         if step.addedToAlbum, let asset = assetsByID[step.id] {
+            takenOutOfAlbum.insert(step.id)
             changeAlbum { await PhotoLibrary.setKept(false, asset) }
         }
         scheduleSave()

@@ -13,7 +13,10 @@ struct Card: Codable, Identifiable, Equatable {
     var links: [String] = []
     var dates: [Date] = []
     var note = ""
+    /// True once the words in the image have been read. Search works from this point.
     var isRead = false
+    /// True once the on-device model has written a title, or there was nothing for it to title.
+    var isTitled = false
     /// True once the title or group was changed by hand, so a re-read leaves them alone.
     var isEdited = false
     /// The last time "Keep" was chosen. Nil means it has never been decided.
@@ -39,6 +42,7 @@ struct Card: Codable, Identifiable, Equatable {
         dates = values.value(.dates, or: [])
         note = values.value(.note, or: "")
         isRead = values.value(.isRead, or: false)
+        isTitled = values.value(.isTitled, or: false)
         isEdited = values.value(.isEdited, or: false)
         keptAt = try? values.decodeIfPresent(Date.self, forKey: .keptAt)
         snoozedAt = try? values.decodeIfPresent(Date.self, forKey: .snoozedAt)

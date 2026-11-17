@@ -18,6 +18,7 @@ struct FindersKeepersApp: App {
                 .environmentObject(router)
                 .preferredColorScheme(.dark)
                 .tint(Color.gold)
+                .keepsAwake(store.isReading && store.settings.keepAwakeWhileReading)
                 .task { await store.start() }
                 .onChange(of: scenePhase) { _, phase in
                     switch phase {

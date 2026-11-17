@@ -1,17 +1,17 @@
 import Photos
 import Vision
 
-/// What reading one screenshot produces.
+/// What the first, fast pass over a screenshot produces.
 struct Reading {
-    var title = ""
-    var summary = ""
-    var group = CardGroup.other.id
     var text = ""
     var facts = TextFacts()
+    /// A plain-rules title and group, used until the on-device model writes better ones.
+    var title = ""
+    var group = CardGroup.other.id
 }
 
 /// Reads a screenshot entirely on the phone: Apple Vision finds the words,
-/// the system data detector finds dates, places and links, and the on-device model writes a title.
+/// and the system data detector finds dates, places and links.
 enum ScreenshotReader {
     /// Enough for search without letting one long screenshot bloat the saved file.
     static let maxStoredCharacters = 6_000
@@ -20,20 +20,12 @@ enum ScreenshotReader {
     static func read(_ asset: PHAsset) async -> Reading? {
         guard let image = await PhotoLibrary.fullSizeImage(for: asset) else { return nil }
         let text = await recognizeText(in: image)
-
-        var reading = Reading()
-        reading.text = String(text.prefix(maxStoredCharacters))
-        reading.facts = TextFacts.find(in: text, captured: asset.creationDate ?? Date())
-
-        if let filing = await OnDeviceModel.file(text) {
-            reading.title = filing.title
-            reading.summary = filing.summary
-            reading.group = filing.group
-        } else {
-            reading.title = TextRules.title(from: text) ?? ""
-            reading.group = CardGroup.guess(from: text).id
-        }
-        return reading
+        return Reading(
+            text: String(text.prefix(maxStoredCharacters)),
+            facts: TextFacts.find(in: text, captured: asset.creationDate ?? Date()),
+            title: TextRules.title(from: text) ?? "",
+            group: CardGroup.guess(from: text).id
+        )
     }
 
     private static func recognizeText(in image: CGImage) async -> String {

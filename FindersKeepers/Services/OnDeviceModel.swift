@@ -24,6 +24,8 @@ struct Filing {
 enum OnDeviceModel {
     /// The model's context is small, so only the start of long text is sent.
     private static let maxPromptCharacters = 2_400
+    /// Shorter than this and there is nothing worth titling.
+    static let minimumCharacters = 12
     private static let maxCharactersPerCard = 320
 
     static var isAvailable: Bool {
@@ -32,7 +34,7 @@ enum OnDeviceModel {
     }
 
     static func file(_ text: String) async -> Filing? {
-        guard isAvailable, text.count > 12 else { return nil }
+        guard isAvailable, text.count >= minimumCharacters else { return nil }
         let categories = CardGroup.all.map { "\($0.id) = \($0.name)" }.joined(separator: "; ")
         let session = LanguageModelSession(instructions: """
             You file screenshots for one person. You are given the text found in a screenshot. \

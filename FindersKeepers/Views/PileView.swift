@@ -56,10 +56,10 @@ struct PileView: View {
 
     @ViewBuilder
     private var statusLines: some View {
-        if store.isReading {
+        if let status = store.readingStatus {
             HStack(spacing: 8) {
                 ProgressView().tint(Color.gold)
-                Text("Reading \(store.readCount) of \(store.screenshots.count). Search fills in as it goes.")
+                Text(status)
                     .font(.footnote)
                     .foregroundStyle(Color.quiet)
                     .contentTransition(.numericText())

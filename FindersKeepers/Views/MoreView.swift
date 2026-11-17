@@ -43,14 +43,16 @@ struct MoreView: View {
 
                 Section {
                     LabeledContent("Screenshots", value: "\(store.screenshots.count)")
-                    LabeledContent("Read so far", value: "\(store.readCount)")
+                    LabeledContent("Words read", value: "\(store.readCount)")
+                    LabeledContent("Titles written", value: "\(store.titledCount)")
+                    Toggle("Keep the screen awake while reading", isOn: $store.settings.keepAwakeWhileReading)
                     Button("Read everything again") { isConfirmingReread = true }
                 } header: {
                     Text("Reading")
                 } footer: {
                     Text(OnDeviceModel.isAvailable
-                         ? "Titles and groups are written by Apple Intelligence on this iPhone. Reading happens while the app is open."
-                         : "Apple Intelligence is not available right now, so titles come from the first line of text. Once it is back, tap Read everything again.")
+                         ? "Reading happens while the app is open. Words come first, so search works early. Titles and groups follow, written by Apple Intelligence on this iPhone. For a big backlog, turn on the switch above and leave the phone on its charger."
+                         : "Apple Intelligence is not available right now, so titles come from the first line of text. Better ones are written on their own once it is back.")
                 }
 
                 Section {

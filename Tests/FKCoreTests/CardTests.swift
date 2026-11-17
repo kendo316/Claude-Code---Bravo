@@ -9,6 +9,7 @@ final class CardTests: XCTestCase {
         XCTAssertEqual(card.title, "Taco place")
         XCTAssertEqual(card.group, "other")
         XCTAssertFalse(card.isRead)
+        XCTAssertFalse(card.isTitled)
         XCTAssertNil(card.keptAt)
     }
 

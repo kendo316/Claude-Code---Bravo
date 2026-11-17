@@ -25,6 +25,15 @@ struct RootView: View {
     }
 }
 
+extension View {
+    /// Holds the screen awake while a backlog is being read, if that setting is on.
+    func keepsAwake(_ isOn: Bool) -> some View {
+        onChange(of: isOn, initial: true) { _, awake in
+            UIApplication.shared.isIdleTimerDisabled = awake
+        }
+    }
+}
+
 /// Shown until the app is allowed to see Photos.
 private struct AccessView: View {
     @EnvironmentObject private var store: Store

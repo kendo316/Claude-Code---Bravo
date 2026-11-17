@@ -9,6 +9,7 @@ struct DetailView: View {
     @State private var isZoomed = false
     @State private var eventDate: EventDate?
     @State private var toast: String?
+    @State private var shareImage: UIImage?
 
     private struct EventDate: Identifiable {
         let date: Date
@@ -47,6 +48,12 @@ struct DetailView: View {
                         }
                     }
 
+                    if let keptAt = card.keptAt {
+                        Label("Kept \(keptAt.shortDay)", systemImage: "checkmark.circle.fill")
+                            .font(.footnote.weight(.semibold))
+                            .foregroundStyle(Color.gold)
+                    }
+
                     if !card.summary.isEmpty {
                         Text(card.summary).foregroundStyle(.white.opacity(0.88))
                     }
@@ -81,7 +88,13 @@ struct DetailView: View {
                 ToolbarItem(placement: .topBarLeading) {
                     Button("Done") { dismiss() }
                 }
-                ToolbarItem(placement: .topBarTrailing) {
+                ToolbarItemGroup(placement: .topBarTrailing) {
+                    if let shareImage {
+                        ShareLink(
+                            item: Image(uiImage: shareImage),
+                            preview: SharePreview(card.displayTitle, image: Image(uiImage: shareImage))
+                        )
+                    }
                     Menu {
                         actions(for: card)
                     } label: {
@@ -95,6 +108,11 @@ struct DetailView: View {
                     .ignoresSafeArea()
             }
             .toast($toast)
+            .task {
+                if let asset = store.asset(id) {
+                    shareImage = await ImageLoader.screen(for: asset)
+                }
+            }
         }
     }
 

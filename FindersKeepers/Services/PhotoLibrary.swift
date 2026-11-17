@@ -92,6 +92,16 @@ enum PhotoLibrary {
         }
     }
 
+    /// The Photos identifiers of everything in the "Finders Keepers" album.
+    static func keptAlbumIDs() -> Set<String> {
+        guard let album = findKeptAlbum() else { return [] }
+        var ids: Set<String> = []
+        PHAsset.fetchAssets(in: album, options: nil).enumerateObjects { asset, _, _ in
+            ids.insert(asset.localIdentifier)
+        }
+        return ids
+    }
+
     private static func keptAlbum(createIfMissing: Bool) async -> PHAssetCollection? {
         if let existing = findKeptAlbum() { return existing }
         guard createIfMissing else { return nil }

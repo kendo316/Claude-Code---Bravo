@@ -10,6 +10,8 @@ struct Settings: Codable, Equatable {
     var reminderWeekday = 1
     var reminderHour = 19
     var reminderMinute = 0
+    /// Stops the screen locking while a backlog is read. Meant for a phone left on its charger.
+    var keepAwakeWhileReading = false
 
     init() {}
 
@@ -21,6 +23,7 @@ struct Settings: Codable, Equatable {
         reminderWeekday = values.value(.reminderWeekday, or: 1)
         reminderHour = values.value(.reminderHour, or: 19)
         reminderMinute = values.value(.reminderMinute, or: 0)
+        keepAwakeWhileReading = values.value(.keepAwakeWhileReading, or: false)
     }
 
     var rules: ReviewRules {
