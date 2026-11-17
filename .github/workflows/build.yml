@@ -42,7 +42,7 @@ jobs:
     runs-on: xcode-27
     permissions:
       contents: write
-    timeout-minutes: 40
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
       - run: bash tools/simulator_shots.sh
