@@ -43,6 +43,7 @@ step "handing the made-up screenshots to the app"
 DATA=$(xcrun simctl get_app_container "$UDID" "$BUNDLE" data)
 mkdir -p "$DATA/Documents/fixtures"
 cp Tests/Fixtures/*.png "$DATA/Documents/fixtures/"
+ls "$DATA/Documents/fixtures"
 limit 30 xcrun simctl status_bar "$UDID" override --time "9:41" --batteryState charged --batteryLevel 100 || true
 
 shoot() {   # shoot <name> <seconds to wait> [launch options...]
@@ -55,6 +56,7 @@ shoot() {   # shoot <name> <seconds to wait> [launch options...]
 }
 
 shoot 1-pile 50 -debugImport YES
+step "import report:"; cat "$DATA/Documents/debug-import.txt" 2>/dev/null || echo "(no report written)"
 shoot 2-search 8 -debugSearch tbsp
 shoot 3-detail 10 -debugDetail YES
 shoot 4-weekly 8 -debugTab weekly

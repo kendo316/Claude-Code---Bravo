@@ -70,21 +70,30 @@ enum DebugLaunch {
     /// so they count as screenshots even if the simulator does not tag them as such.
     static func importFixturesIfAsked() async {
         guard UserDefaults.standard.bool(forKey: "debugImport") else { return }
-        let folder = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0].appendingPathComponent("fixtures")
+        let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
+        let folder = documents.appendingPathComponent("fixtures")
         let files = ((try? FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension.lowercased() == "png" }
             .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        var log = "access=\(PhotoLibrary.access.rawValue) files=\(files.count)\n"
+        defer { try? log.write(to: documents.appendingPathComponent("debug-import.txt"), atomically: true, encoding: .utf8) }
         guard !files.isEmpty else { return }
+
         let created = IdentifierBox()
-        try? await PHPhotoLibrary.shared().performChanges {
-            for file in files {
-                if let id = PHAssetCreationRequest.creationRequestForAssetFromImage(atFileURL: file)?
-                    .placeholderForCreatedAsset?.localIdentifier {
-                    created.ids.append(id)
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                for file in files {
+                    if let id = PHAssetCreationRequest.creationRequestForAssetFromImage(atFileURL: file)?
+                        .placeholderForCreatedAsset?.localIdentifier {
+                        created.ids.append(id)
+                    }
                 }
             }
+        } catch {
+            log += "import failed: \(error)\n"
         }
         UserDefaults.standard.set(fixtureIDs + created.ids, forKey: "debugFixtureIDs")
+        log += "created=\(created.ids.count) visible=\(PhotoLibrary.screenshots().count)\n"
         for file in files { try? FileManager.default.removeItem(at: file) }
     }
 
