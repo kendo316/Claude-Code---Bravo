@@ -8,7 +8,6 @@ ID = {k: f"F1ND000000000000000000{i:02X}" for i, k in enumerate([
     "tgtConfigs", "tgtDebug", "tgtRelease"], start=1)}
 
 PHOTOS = "Finders Keepers reads your screenshots on this iPhone so you can sort them and clear them out. Nothing is uploaded."
-CAL = "Adds a date from a screenshot to your calendar when you tap it."
 
 def settings(d, indent="\t\t\t\t"):
     out = []
@@ -39,7 +38,6 @@ TARGET = {
     "INFOPLIST_KEY_CFBundleDisplayName": "Finders Keepers",
     "INFOPLIST_KEY_ITSAppUsesNonExemptEncryption": "NO",
     "INFOPLIST_KEY_LSApplicationCategoryType": "public.app-category.productivity",
-    "INFOPLIST_KEY_NSCalendarsWriteOnlyAccessUsageDescription": CAL,
     "INFOPLIST_KEY_NSPhotoLibraryUsageDescription": PHOTOS,
     "INFOPLIST_KEY_UIApplicationSceneManifest_Generation": "YES",
     "INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents": "YES",

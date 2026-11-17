@@ -1,318 +1,402 @@
 import Photos
 import SwiftUI
-import UserNotifications
 
+/// The three answers in a weekly look.
+enum Verdict {
+    case keep, delete, later
+}
+
+/// What is needed to take one decision back.
+struct UndoStep {
+    let id: String
+    let cardBefore: Card?
+    let wasMarkedForDelete: Bool
+    let addedToAlbum: Bool
+}
+
+/// A screenshot with a day still ahead of it.
 struct Upcoming: Identifiable {
     let card: Card
     let date: Date
     var id: String { card.id }
 }
 
-struct UndoStep {
-    let id: String
-    let prevCard: Card?
-    let wasPending: Bool
-    let wasKept: Bool
-}
-
+/// The app's single source of truth: the screenshots in Photos plus what we remember about each.
 @MainActor
 final class Store: ObservableObject {
-    @Published var auth: PHAuthorizationStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-    @Published var assets: [PHAsset] = []            // oldest first
-    @Published var cards: [String: Card] = [:]
-    @Published var pending: Set<String> = []         // marked Delete, waiting for the one confirmation
-    @Published var lastReview: Date?
-    @Published var reading = false
-    @Published var readTotal = 0
-    @Published var readDone = 0
-
-    @Published var batch: Int { didSet { UserDefaults.standard.set(batch, forKey: "batch") } }
-    @Published var resurfaceDays: Int { didSet { UserDefaults.standard.set(resurfaceDays, forKey: "resurface") } }
-    @Published var reminderOn: Bool { didSet { UserDefaults.standard.set(reminderOn, forKey: "reminder") } }
-
-    private var byID: [String: PHAsset] = [:]
-    private var readTask: Task<Void, Never>?
-    private var saveTask: Task<Void, Never>?
-    private var gen = 0
-
-    init() {
-        let d = UserDefaults.standard
-        batch = d.object(forKey: "batch") as? Int ?? 25
-        resurfaceDays = d.object(forKey: "resurface") as? Int ?? 180
-        reminderOn = d.object(forKey: "reminder") as? Bool ?? true
-        load()
+    @Published private(set) var access = PhotoLibrary.access
+    /// Oldest first.
+    @Published private(set) var screenshots: [PHAsset] = []
+    @Published private(set) var cards: [String: Card] = [:]
+    /// Chosen for deletion, waiting for the single iOS confirmation.
+    @Published private(set) var markedForDelete: Set<String> = []
+    @Published private(set) var lastLookAt: Date?
+    @Published private(set) var looksCompleted = 0
+    @Published private(set) var readCount = 0
+    @Published private(set) var isReading = false
+    @Published private(set) var remindersBlocked = false
+    @Published var settings = Settings() {
+        didSet { if settings != oldValue { settingsChanged(from: oldValue) } }
     }
 
-    var canRead: Bool { auth == .authorized || auth == .limited }
+    private let file = CardFile()
+    private var orderedIDs: [String] = []
+    private var assetsByID: [String: PHAsset] = [:]
+    private var searchTextByID: [String: String] = [:]
+    private var couldNotRead: Set<String> = []
+    private var observer: LibraryObserver?
+    private var readTask: Task<Void, Never>?
+    private var saveTask: Task<Void, Never>?
+    private var albumWork: Task<Void, Never>?
 
-    // MARK: Lifecycle
+    init() {
+        let saved = file.load()
+        cards = Dictionary(saved.cards.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        markedForDelete = Set(saved.markedForDelete)
+        lastLookAt = saved.lastLookAt
+        looksCompleted = saved.looksCompleted
+        settings = saved.settings
+    }
 
-    func bootstrap() async {
-        if auth == .notDetermined {
-            auth = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+    var hasAccess: Bool {
+        access == .authorized || access == .limited
+    }
+
+    // MARK: - Starting up
+
+    func start() async {
+        if access == .notDetermined {
+            access = await PhotoLibrary.requestAccess()
         }
         reload()
-        startReading()
-        if reminderOn { await scheduleWeekly(true) }
+        await applyReminder()
     }
 
     func requestAccess() async {
-        auth = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
+        access = await PhotoLibrary.requestAccess()
         reload()
+    }
+
+    /// Re-reads the list of screenshots from Photos. Cheap, and safe to call often.
+    func reload() {
+        let current = PhotoLibrary.access
+        if access != current { access = current }
+        guard hasAccess else { return }
+        if observer == nil {
+            observer = LibraryObserver { [weak self] in self?.reload() }
+        }
+        screenshots = PhotoLibrary.screenshots()
+        orderedIDs = screenshots.map(\.localIdentifier)
+        assetsByID = Dictionary(zip(orderedIDs, screenshots), uniquingKeysWith: { first, _ in first })
+        forgetScreenshotsThatAreGone()
+        readCount = orderedIDs.filter { cards[$0]?.isRead == true }.count
         startReading()
     }
 
-    func becameActive() {
-        auth = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        reload()
-        startReading()
+    /// Drops what we remember about screenshots that no longer exist.
+    /// Skipped when the library looks empty or only partly shared, so a hiccup can never wipe your notes.
+    private func forgetScreenshotsThatAreGone() {
+        guard access == .authorized, !screenshots.isEmpty else { return }
+        let gone = cards.keys.filter { assetsByID[$0] == nil }
+        if !gone.isEmpty {
+            var remaining = cards
+            for id in gone {
+                remaining[id] = nil
+                searchTextByID[id] = nil
+            }
+            cards = remaining
+            scheduleSave()
+        }
+        let stillMarked = markedForDelete.filter { assetsByID[$0] != nil }
+        if stillMarked.count != markedForDelete.count { markedForDelete = stillMarked }
     }
 
-    func becameInactive() {
-        gen += 1
-        readTask?.cancel()
+    func asset(_ id: String) -> PHAsset? {
+        assetsByID[id]
+    }
+
+    func card(_ id: String) -> Card {
+        cards[id] ?? Card(id: id)
+    }
+
+    /// The one place a card is changed, so search and saving always stay in step.
+    private func update(_ id: String, _ change: (inout Card) -> Void) {
+        var card = cards[id] ?? Card(id: id)
+        change(&card)
+        cards[id] = card
+        searchTextByID[id] = nil
+        scheduleSave()
+    }
+
+    // MARK: - Reading screenshots
+
+    /// Reads unread screenshots one at a time while the app is open.
+    private func startReading() {
+        guard readTask == nil, hasAccess, nextUnread() != nil else { return }
+        isReading = true
+        readTask = Task { [weak self] in await self?.readUntilDone() }
+    }
+
+    private func readUntilDone() async {
+        while let asset = nextUnread() {
+            let id = asset.localIdentifier
+            guard let reading = await ScreenshotReader.read(asset) else {
+                couldNotRead.insert(id)      // skip for now, try again next launch
+                continue
+            }
+            let wasRead = cards[id]?.isRead == true
+            update(id) { card in
+                if !card.isEdited {
+                    card.title = reading.title
+                    card.group = reading.group
+                }
+                card.summary = reading.summary
+                card.text = reading.text
+                card.address = reading.facts.address
+                card.links = reading.facts.links
+                card.dates = reading.facts.dates
+                card.isRead = true
+            }
+            if !wasRead, assetsByID[id] != nil { readCount += 1 }
+        }
+        isReading = false
         readTask = nil
-        reading = false
         saveNow()
     }
 
-    // MARK: Screenshots from Photos
-
-    func reload() {
-        guard canRead else { return }
-        let o = PHFetchOptions()
-        o.predicate = NSPredicate(format: "(mediaSubtypes & %ld) != 0", Int(PHAssetMediaSubtype.photoScreenshot.rawValue))
-        o.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: true)]
-        let r = PHAsset.fetchAssets(with: .image, options: o)
-        var a: [PHAsset] = []
-        a.reserveCapacity(r.count)
-        r.enumerateObjects { x, _, _ in a.append(x) }
-        assets = a
-        byID = Dictionary(uniqueKeysWithValues: a.map { ($0.localIdentifier, $0) })
-
-        if auth == .authorized {   // only prune when we can see everything
-            let gone = cards.keys.filter { byID[$0] == nil }
-            for k in gone { cards[k] = nil }
-            pending = pending.filter { byID[$0] != nil }
-        }
-        readTotal = assets.count
-        readDone = assets.filter { cards[$0.localIdentifier]?.read == true }.count
-    }
-
-    func asset(_ id: String) -> PHAsset? { byID[id] }
-
-    // MARK: Reading (OCR + title + group), oldest first, review queue first
-
-    func startReading() {
-        guard readTask == nil, canRead else { return }
-        gen += 1
-        let g = gen
-        reading = true
-        readTask = Task { [weak self] in
-            while !Task.isCancelled {
-                guard let self, let a = self.nextUnread() else { break }
-                await self.readOne(a)
-            }
-            guard let self else { return }
-            if self.gen == g { self.reading = false; self.readTask = nil }
-        }
-    }
-
-    private func isRead(_ a: PHAsset) -> Bool { cards[a.localIdentifier]?.read == true }
-
+    /// This week's batch comes first, then the newest, since recent screenshots are the ones you search for.
     private func nextUnread() -> PHAsset? {
-        if let a = reviewQueue().first(where: { !isRead($0) }) { return a }
-        return assets.first { !isRead($0) && !pending.contains($0.localIdentifier) }
-    }
-
-    private func readOne(_ a: PHAsset) async {
-        var c = cards[a.localIdentifier] ?? Card(id: a.localIdentifier)
-        if let img = await PhotoLib.image(for: a, size: PHImageManagerMaximumSize, mode: .default),
-           let cg = img.cgImage {
-            let e = await Reader.read(cg)
-            c.title = e.title; c.summary = e.summary; c.group = e.group
-            c.text = e.text; c.address = e.address; c.links = e.links; c.dates = e.dates
-        } else {
-            c.title = "Screenshot"
+        func needsReading(_ id: String) -> Bool {
+            cards[id]?.isRead != true && !couldNotRead.contains(id) && !markedForDelete.contains(id)
         }
-        c.read = true
-        cards[c.id] = c
-        readDone = assets.filter { cards[$0.localIdentifier]?.read == true }.count
-        scheduleSave()
+        let id = lookQueueIDs().first(where: needsReading) ?? orderedIDs.last(where: needsReading)
+        return id.flatMap { assetsByID[$0] }
     }
 
-    func rereadAll() {
-        for k in cards.keys { cards[k]?.read = false }
-        readDone = 0
+    func readEverythingAgain() {
+        cards = cards.mapValues { card in
+            var unread = card
+            unread.isRead = false
+            return unread
+        }
+        couldNotRead = []
+        readCount = 0
         scheduleSave()
         startReading()
     }
 
-    // MARK: Weekly look
+    // MARK: - The weekly look
 
-    func reviewQueue() -> [PHAsset] {
-        let now = Date()
-        let q = assets.filter { a in
-            let id = a.localIdentifier
-            if pending.contains(id) { return false }
-            let c = cards[id]
-            if let s = c?.snoozedAt, now.timeIntervalSince(s) < 7 * 86400 { return false }
-            if let d = c?.decidedAt {
-                return resurfaceDays > 0 && now.timeIntervalSince(d) > Double(resurfaceDays) * 86400
+    private func lookQueueIDs(now: Date = Date()) -> [String] {
+        settings.rules.batch(in: orderedIDs, cards: cards, excluding: markedForDelete, now: now)
+    }
+
+    /// This week's batch: the oldest screenshots that are due.
+    func lookQueue() -> [PHAsset] {
+        lookQueueIDs().compactMap { assetsByID[$0] }
+    }
+
+    /// Everything waiting in line, not just this week's batch.
+    var dueCount: Int {
+        settings.rules.dueIDs(in: orderedIDs, cards: cards, excluding: markedForDelete, now: Date()).count
+    }
+
+    @discardableResult
+    func decide(_ verdict: Verdict, on asset: PHAsset, now: Date = Date()) -> UndoStep {
+        let id = asset.localIdentifier
+        let before = cards[id]
+        let step = UndoStep(
+            id: id,
+            cardBefore: before,
+            wasMarkedForDelete: markedForDelete.contains(id),
+            addedToAlbum: verdict == .keep && before?.keptAt == nil
+        )
+        switch verdict {
+        case .keep:
+            if step.wasMarkedForDelete { markedForDelete.remove(id) }
+            update(id) { card in
+                card.keptAt = now
+                card.snoozedAt = nil
             }
-            return true
-        }
-        return Array(q.prefix(batch))
-    }
-
-    func dueCount() -> Int {
-        let now = Date()
-        return assets.filter { a in
-            let id = a.localIdentifier
-            if pending.contains(id) { return false }
-            let c = cards[id]
-            if let s = c?.snoozedAt, now.timeIntervalSince(s) < 7 * 86400 { return false }
-            if let d = c?.decidedAt { return resurfaceDays > 0 && now.timeIntervalSince(d) > Double(resurfaceDays) * 86400 }
-            return true
-        }.count
-    }
-
-    func card(_ a: PHAsset) -> Card { cards[a.localIdentifier] ?? Card(id: a.localIdentifier) }
-
-    func keep(_ a: PHAsset) -> UndoStep {
-        let u = UndoStep(id: a.localIdentifier, prevCard: cards[a.localIdentifier],
-                         wasPending: pending.contains(a.localIdentifier), wasKept: cards[a.localIdentifier]?.decidedAt != nil)
-        var c = card(a); c.decidedAt = Date(); c.snoozedAt = nil
-        cards[c.id] = c
-        Task { await PhotoLib.setKept(a, true) }
-        scheduleSave()
-        return u
-    }
-
-    func snooze(_ a: PHAsset) -> UndoStep {
-        let u = UndoStep(id: a.localIdentifier, prevCard: cards[a.localIdentifier],
-                         wasPending: pending.contains(a.localIdentifier), wasKept: false)
-        var c = card(a); c.snoozedAt = Date(); c.snoozes += 1
-        cards[c.id] = c
-        scheduleSave()
-        return u
-    }
-
-    func markDelete(_ a: PHAsset) -> UndoStep {
-        let u = UndoStep(id: a.localIdentifier, prevCard: cards[a.localIdentifier],
-                         wasPending: pending.contains(a.localIdentifier), wasKept: false)
-        pending.insert(a.localIdentifier)
-        scheduleSave()
-        return u
-    }
-
-    func undo(_ u: UndoStep) {
-        cards[u.id] = u.prevCard
-        if u.wasPending { pending.insert(u.id) } else { pending.remove(u.id) }
-        if let a = byID[u.id], !u.wasKept { Task { await PhotoLib.setKept(a, false) } }
-        scheduleSave()
-    }
-
-    func unmarkDelete(_ id: String) { pending.remove(id); scheduleSave() }
-
-    /// One system prompt covers the whole batch. Photos keeps them 30 days in Recently Deleted.
-    func commitDeletes() async -> Bool {
-        let list = assets.filter { pending.contains($0.localIdentifier) }
-        guard !list.isEmpty else { return true }
-        let ok = await PhotoLib.delete(list)
-        if ok {
-            for a in list { cards[a.localIdentifier] = nil }
-            pending = []
-            reload()
+            if step.addedToAlbum { changeAlbum { await PhotoLibrary.setKept(true, asset) } }
+        case .later:
+            update(id) { card in
+                card.snoozedAt = now
+                card.snoozeCount += 1
+            }
+        case .delete:
+            markedForDelete.insert(id)
             scheduleSave()
         }
-        return ok
+        return step
     }
 
-    func finishedReview() { lastReview = Date(); scheduleSave() }
-
-    // MARK: Pile helpers
-
-    func upcoming() -> [Upcoming] {
-        let now = Date().addingTimeInterval(-86400)
-        let soon = Date().addingTimeInterval(86400 * 45)
-        var out: [Upcoming] = []
-        for c in cards.values where !pending.contains(c.id) {
-            if let d = c.dates.first(where: { $0 > now && $0 < soon }) { out.append(Upcoming(card: c, date: d)) }
+    func undo(_ step: UndoStep) {
+        cards[step.id] = step.cardBefore
+        searchTextByID[step.id] = nil
+        if step.wasMarkedForDelete {
+            markedForDelete.insert(step.id)
+        } else {
+            markedForDelete.remove(step.id)
         }
-        return out.sorted { $0.date < $1.date }
+        if step.addedToAlbum, let asset = assetsByID[step.id] {
+            changeAlbum { await PhotoLibrary.setKept(false, asset) }
+        }
+        scheduleSave()
+        startReading()
     }
 
-    func search(_ q: String, group: String?) -> [PHAsset] {
-        let toks = q.lowercased().split(separator: " ").map(String.init)
-        return assets.reversed().filter { a in
-            let id = a.localIdentifier
-            if pending.contains(id) { return false }
-            let c = cards[id]
-            if let g = group, c?.group != g { return false }
-            if toks.isEmpty { return true }
-            guard let c else { return false }
-            let h = c.haystack
-            return toks.allSatisfy { h.contains($0) }
+    /// Records that a look happened. Only a look carried through to the end counts toward the tally.
+    func finishLook(completed: Bool) {
+        lastLookAt = Date()
+        if completed { looksCompleted += 1 }
+        scheduleSave()
+    }
+
+    func unmarkAll() {
+        markedForDelete = []
+        scheduleSave()
+    }
+
+    /// Sends everything marked to Recently Deleted. iOS asks once for the whole batch.
+    /// Returns false if the person cancels, in which case nothing changes.
+    func deleteMarked() async -> Bool {
+        let doomed = screenshots.filter { markedForDelete.contains($0.localIdentifier) }
+        guard !doomed.isEmpty else {
+            unmarkAll()
+            return true
+        }
+        guard await PhotoLibrary.delete(doomed) else { return false }
+        for asset in doomed {
+            cards[asset.localIdentifier] = nil
+            searchTextByID[asset.localIdentifier] = nil
+        }
+        markedForDelete = []
+        reload()
+        scheduleSave()
+        return true
+    }
+
+    /// Album changes run one after another, so a quick keep-then-undo can never land out of order.
+    private func changeAlbum(_ work: @escaping () async -> Void) {
+        let earlier = albumWork
+        albumWork = Task {
+            await earlier?.value
+            await work()
         }
     }
 
-    func binding(_ id: String, _ kp: WritableKeyPath<Card, String>) -> Binding<String> {
+    // MARK: - The pile
+
+    /// Newest first, narrowed by the search words and the chosen group.
+    func pile(matching query: String, in group: String?) -> [PHAsset] {
+        let tokens = TextRules.tokens(query)
+        return screenshots.reversed().filter { asset in
+            let id = asset.localIdentifier
+            if markedForDelete.contains(id) { return false }
+            if let group, cards[id]?.group != group { return false }
+            return tokens.isEmpty || TextRules.matches(searchText(for: id), tokens)
+        }
+    }
+
+    private func searchText(for id: String) -> String {
+        if let cached = searchTextByID[id] { return cached }
+        let text = cards[id]?.searchText ?? ""
+        searchTextByID[id] = text
+        return text
+    }
+
+    /// Screenshots that mention a day in the next six weeks, soonest first.
+    func upcoming(now: Date = Date()) -> [Upcoming] {
+        let from = now.addingTimeInterval(-12 * 3_600)
+        let until = now.addingTimeInterval(42 * 86_400)
+        return cards.values
+            .filter { !markedForDelete.contains($0.id) && assetsByID[$0.id] != nil }
+            .compactMap { card in
+                card.dates.first { $0 > from && $0 < until }.map { Upcoming(card: card, date: $0) }
+            }
+            .sorted { $0.date < $1.date }
+    }
+
+    /// The few cards most likely to answer a question.
+    func cardsRelevant(to question: String, limit: Int = 6) -> [Card] {
+        var searchable: [String: String] = [:]
+        for id in orderedIDs where !markedForDelete.contains(id) && cards[id]?.isRead == true {
+            searchable[id] = searchText(for: id)
+        }
+        return TextRules.rank(question: question, searchTextByID: searchable, limit: limit).compactMap { cards[$0] }
+    }
+
+    /// A two-way link between a text field and one field of a card.
+    func binding(_ id: String, _ field: WritableKeyPath<Card, String>, marksEdited: Bool = false) -> Binding<String> {
         Binding(
-            get: { self.cards[id]?[keyPath: kp] ?? "" },
-            set: { v in
-                var c = self.cards[id] ?? Card(id: id)
-                c[keyPath: kp] = v
-                self.cards[id] = c
-                self.scheduleSave()
-            })
+            get: { self.cards[id]?[keyPath: field] ?? Card(id: id)[keyPath: field] },
+            set: { newValue in
+                guard newValue != self.card(id)[keyPath: field] else { return }
+                self.update(id) { card in
+                    card[keyPath: field] = newValue
+                    if marksEdited { card.isEdited = true }
+                }
+            }
+        )
     }
 
-    // MARK: Sunday notification
+    // MARK: - Reminder
 
-    func scheduleWeekly(_ on: Bool) async {
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: ["weekly"])
-        guard on else { return }
-        let granted = (try? await center.requestAuthorization(options: [.alert, .sound, .badge])) ?? false
-        guard granted else { return }
-        var d = DateComponents()
-        d.weekday = 1; d.hour = 19; d.minute = 0     // Sunday, 7 pm
-        let content = UNMutableNotificationContent()
-        content.title = "Screenshot look"
-        content.body = "Your oldest screenshots are waiting. Keep, delete, or next week."
-        content.sound = .default
-        let req = UNNotificationRequest(identifier: "weekly", content: content,
-                                        trigger: UNCalendarNotificationTrigger(dateMatching: d, repeats: true))
-        try? await center.add(req)
-    }
-
-    // MARK: Persistence (a JSON file in the app's own storage)
-
-    private var fileURL: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir.appendingPathComponent("fk.json")
-    }
-
-    private func load() {
-        guard let data = try? Data(contentsOf: fileURL),
-              let s = try? JSONDecoder().decode(Saved.self, from: data) else { return }
-        cards = s.cards
-        pending = Set(s.pending)
-        lastReview = s.lastReview
-    }
-
-    func scheduleSave() {
-        saveTask?.cancel()
-        saveTask = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            if !Task.isCancelled { self?.saveNow() }
+    private func settingsChanged(from old: Settings) {
+        scheduleSave()
+        let reminderChanged = old.reminderOn != settings.reminderOn
+            || old.reminderWeekday != settings.reminderWeekday
+            || old.reminderHour != settings.reminderHour
+            || old.reminderMinute != settings.reminderMinute
+        if reminderChanged {
+            Task { await applyReminder() }
         }
     }
 
+    private func applyReminder() async {
+        guard settings.reminderOn else {
+            WeeklyReminder.cancel()
+            remindersBlocked = false
+            return
+        }
+        let scheduled = await WeeklyReminder.schedule(
+            weekday: settings.reminderWeekday,
+            hour: settings.reminderHour,
+            minute: settings.reminderMinute
+        )
+        remindersBlocked = !scheduled
+    }
+
+    // MARK: - Saving
+
+    private var snapshot: SavedState {
+        var state = SavedState()
+        state.cards = Array(cards.values)
+        state.markedForDelete = Array(markedForDelete)
+        state.lastLookAt = lastLookAt
+        state.looksCompleted = looksCompleted
+        state.settings = settings
+        return state
+    }
+
+    /// Waits a moment so a burst of changes becomes one write.
+    /// While a backlog is being read the wait is longer, to spare the phone's storage.
+    private func scheduleSave() {
+        guard saveTask == nil else { return }
+        let wait: Duration = isReading ? .seconds(20) : .seconds(2)
+        saveTask = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard let self, !Task.isCancelled else { return }
+            self.saveTask = nil
+            self.file.save(self.snapshot)
+        }
+    }
+
+    /// Writes immediately. Called as the app goes to the background.
     func saveNow() {
-        let s = Saved(cards: cards, pending: Array(pending), lastReview: lastReview)
-        if let data = try? JSONEncoder().encode(s) { try? data.write(to: fileURL, options: .atomic) }
+        saveTask?.cancel()
+        saveTask = nil
+        file.saveNow(snapshot)
     }
 }

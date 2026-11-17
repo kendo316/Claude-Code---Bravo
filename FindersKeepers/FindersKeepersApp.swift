@@ -1,44 +1,42 @@
 import SwiftUI
 import UserNotifications
 
-extension Notification.Name {
-    static let openWeekly = Notification.Name("openWeekly")
-}
-
-/// Handles taps on the Sunday notification.
-final class NotifDelegate: NSObject, UNUserNotificationCenterDelegate {
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                            didReceive response: UNNotificationResponse) async {
-        UserDefaults.standard.set(true, forKey: "openWeekly")
-        NotificationCenter.default.post(name: .openWeekly, object: nil)
-    }
-
-    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter,
-                                            willPresent notification: UNNotification) async -> UNNotificationPresentationOptions {
-        [.banner, .sound]
-    }
-}
-
-let notifDelegate = NotifDelegate()
-
 @main
 struct FindersKeepersApp: App {
     @StateObject private var store = Store()
-    @Environment(\.scenePhase) private var phase
+    @StateObject private var router = Router.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     init() {
-        UNUserNotificationCenter.current().delegate = notifDelegate
+        UNUserNotificationCenter.current().delegate = ReminderTapHandler.shared
     }
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
+                .environmentObject(router)
                 .preferredColorScheme(.dark)
-                .task { await store.bootstrap() }
-                .onChange(of: phase) { _, p in
-                    if p == .active { store.becameActive() } else { store.becameInactive() }
+                .tint(Color.gold)
+                .task { await store.start() }
+                .onChange(of: scenePhase) { _, phase in
+                    switch phase {
+                    case .active: store.reload()
+                    case .background: store.saveNow()
+                    default: break
+                    }
                 }
         }
     }
+}
+
+enum AppTab: Hashable {
+    case pile, weekly, more
+}
+
+/// Which tab is showing. Shared so a tapped reminder can jump straight to Weekly.
+@MainActor
+final class Router: ObservableObject {
+    static let shared = Router()
+    @Published var tab: AppTab = .pile
 }

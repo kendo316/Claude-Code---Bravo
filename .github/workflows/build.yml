@@ -8,14 +8,24 @@ concurrency:
   group: build-${{ github.ref }}
   cancel-in-progress: true
 jobs:
+  test:
+    name: Test the core logic
+    runs-on: xcode-27
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          set -o pipefail
+          swift test 2>&1 | tail -80
   build:
+    name: Compile the app
     runs-on: xcode-27
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - name: Tools
         run: xcodebuild -version && swift --version
-      - name: Compile the app
+      - name: Compile
         run: |
           set -o pipefail
           xcodebuild -project FindersKeepers.xcodeproj -scheme FindersKeepers \
