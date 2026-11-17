@@ -1,0 +1,7 @@
+build/
+build.log
+.build/
+DerivedData/
+xcuserdata/
+.DS_Store
+__pycache__/
