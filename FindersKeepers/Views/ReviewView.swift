@@ -92,7 +92,7 @@ struct ReviewView: View {
                     .shadow(color: .black.opacity(0.35), radius: 14, y: 8)
                     .scaleEffect(isFront ? 1 : 0.94)
                     .opacity(isFront ? 1 : 0.5)
-                    .offset(isFront ? drag : .zero)
+                    .offset(isFront ? drag : CGSize(width: 0, height: 22))   // the next card peeks out below
                     .rotationEffect(.degrees(isFront ? Double(drag.width) / 22 : 0))
                     .zIndex(isFront ? 1 : 0)
                     .allowsHitTesting(isFront && !isFlinging)
@@ -103,6 +103,7 @@ struct ReviewView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(.bottom, 22)
     }
 
     /// The word that appears on the card once you have dragged far enough to commit.
@@ -153,7 +154,7 @@ struct ReviewView: View {
                     fling(verdict)
                 } label: {
                     VStack(spacing: 4) {
-                        Image(systemName: verdict.icon).font(.title3)
+                        Image(systemName: verdict.icon).font(.title3).frame(height: 26)
                         Text(verdict.label).font(.footnote.weight(.bold))
                     }
                     .frame(maxWidth: .infinity)

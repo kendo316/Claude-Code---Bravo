@@ -47,6 +47,7 @@ TARGET = {
     "MARKETING_VERSION": "1.0", "PRODUCT_BUNDLE_IDENTIFIER": "com.kendo316.finderskeepers",
     "PRODUCT_NAME": "$(TARGET_NAME)", "SUPPORTED_PLATFORMS": "iphoneos iphonesimulator",
     "SUPPORTS_MACCATALYST": "NO", "SWIFT_EMIT_LOC_STRINGS": "YES", "SWIFT_VERSION": "5.0",
+    "SWIFT_STRICT_CONCURRENCY": "complete",
     "TARGETED_DEVICE_FAMILY": "1",
 }
 

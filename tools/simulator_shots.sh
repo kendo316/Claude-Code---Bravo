@@ -13,6 +13,7 @@ limit() {
   "$@" & local pid=$!
   ( sleep "$seconds"; kill -9 "$pid" 2>/dev/null && echo "GAVE UP after ${seconds}s: $*" ) & local watchdog=$!
   local status=0; wait "$pid" || status=$?
+  pkill -P "$watchdog" 2>/dev/null || true
   kill "$watchdog" 2>/dev/null || true
   return $status
 }
@@ -68,3 +69,4 @@ if p.exists():
               "| address:", c.get("address"), "| links:", c.get("links"), "| chars:", len(c.get("text", "")))
 PY
 ls ~/Library/Logs/DiagnosticReports/ 2>/dev/null | grep -i finders && echo "CRASH REPORT FOUND" || echo "no crash reports"
+limit 60 xcrun simctl shutdown all || true

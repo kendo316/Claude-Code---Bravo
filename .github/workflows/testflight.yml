@@ -1,0 +1,76 @@
+# Builds the app on a GitHub Mac, signs it with your Apple Developer account, and sends it to TestFlight.
+# Runs when the branch "finders-keepers-release" is pushed. Needs four repository secrets (see README).
+name: Ship to TestFlight
+on:
+  push:
+    branches: [finders-keepers-release]
+permissions:
+  contents: read
+concurrency:
+  group: testflight
+  cancel-in-progress: false
+jobs:
+  ship:
+    name: Build, sign, upload
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the four secrets are set
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          missing=0
+          for name in ASC_KEY_ID ASC_ISSUER_ID APPLE_TEAM_ID ASC_KEY_P8; do
+            if [ -z "${!name}" ]; then echo "::error::The secret $name is not set."; missing=1; fi
+          done
+          exit $missing
+
+      - name: Test the core logic
+        run: |
+          set -o pipefail
+          swift test 2>&1 | tail -20
+
+      - name: Archive
+        # Unsigned on purpose. Signing happens once, at export, with the account's cloud-managed
+        # distribution certificate. Signing here would create a new certificate on every run.
+        run: |
+          set -o pipefail
+          xcodebuild archive -project FindersKeepers.xcodeproj -scheme FindersKeepers \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FindersKeepers.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            CURRENT_PROJECT_VERSION="$(date -u +%Y%m%d%H%M)" 2>&1 | tee archive.log | grep -E "(error|warning): |ARCHIVE (SUCCEEDED|FAILED)" | sort -u
+
+      - name: Sign and upload to TestFlight
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -o pipefail
+          KEY="$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$KEY"
+          cp tools/ExportOptions.plist "$RUNNER_TEMP/ExportOptions.plist"
+          plutil -insert teamID -string "$APPLE_TEAM_ID" "$RUNNER_TEMP/ExportOptions.plist"
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/FindersKeepers.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$KEY" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID" 2>&1 | tee export.log | tail -40
+
+      - name: Remove the key from the build machine
+        if: always()
+        run: rm -f "$RUNNER_TEMP"/AuthKey_*.p8
+
+      - name: Show the end of the logs if something failed
+        if: failure()
+        run: |
+          tail -60 archive.log 2>/dev/null || true
+          tail -80 export.log 2>/dev/null || true

@@ -37,6 +37,21 @@ jobs:
       - name: Full log on failure
         if: failure()
         run: tail -150 build.log
+  release:
+    name: Release build archives
+    runs-on: xcode-27
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Archive exactly as the TestFlight workflow does, minus signing and upload
+        run: |
+          set -o pipefail
+          xcodebuild archive -project FindersKeepers.xcodeproj -scheme FindersKeepers \
+            -configuration Release -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/FindersKeepers.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO CURRENT_PROJECT_VERSION="$(date -u +%Y%m%d%H%M)" 2>&1 | tee archive.log | grep -E "(error|warning): |ARCHIVE (SUCCEEDED|FAILED)" | sort -u
+          plutil -lint tools/ExportOptions.plist
+          plutil -p "$RUNNER_TEMP/FindersKeepers.xcarchive/Info.plist" | grep -E "CFBundle(Version|ShortVersionString|Identifier)"
   screens:
     name: Run in a simulator
     runs-on: xcode-27
