@@ -34,7 +34,14 @@ APP=build/Build/Products/Debug-iphonesimulator/FindersKeepers.app
 test -d "$APP"
 
 step "adding the made-up screenshots to Photos"
-limit 120 xcrun simctl addmedia "$UDID" Tests/Fixtures/*.png
+# addmedia can hang on a fresh simulator until Photos has started once, so start it first,
+# then add the images one at a time, retrying each once.
+limit 60 xcrun simctl launch "$UDID" com.apple.mobileslideshow || true
+sleep 20
+limit 30 xcrun simctl terminate "$UDID" com.apple.mobileslideshow || true
+for f in Tests/Fixtures/*.png; do
+  limit 60 xcrun simctl addmedia "$UDID" "$f" || { sleep 5; limit 60 xcrun simctl addmedia "$UDID" "$f" || echo "could not add $f"; }
+done
 step "installing"
 limit 120 xcrun simctl install "$UDID" "$APP"
 limit 60 xcrun simctl privacy "$UDID" grant photos "$BUNDLE"
