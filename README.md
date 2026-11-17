@@ -29,7 +29,7 @@ Everything happens on the phone. There is no account, no server and no tracking,
 `.github/workflows/build.yml` runs on GitHub's Mac servers:
 
 1. `swift test` on the core rules.
-2. A full compile for iPhone, with strict concurrency checking on.
+2. A full compile for iPhone in the Swift 6 language mode, where data-race mistakes are compile errors.
 3. A release archive, exactly as the TestFlight workflow builds it.
 4. A run in an iPhone simulator with six made-up screenshots, saving a picture of each screen.
 

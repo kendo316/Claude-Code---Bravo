@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 // Lets `swift test` check the app's pure logic (FindersKeepers/Core) without a phone or simulator.
 import PackageDescription
 

@@ -115,9 +115,9 @@ enum PhotoLibrary {
 
 /// Tells the app when the photo library changes, for example when a new screenshot is taken.
 final class LibraryObserver: NSObject, PHPhotoLibraryChangeObserver {
-    private let onChange: @MainActor () -> Void
+    private let onChange: @MainActor @Sendable () -> Void
 
-    init(onChange: @escaping @MainActor () -> Void) {
+    init(onChange: @escaping @MainActor @Sendable () -> Void) {
         self.onChange = onChange
         super.init()
         PHPhotoLibrary.shared().register(self)

@@ -35,7 +35,7 @@ enum WeeklyReminder {
 }
 
 /// Opens the Weekly tab when the reminder is tapped.
-final class ReminderTapHandler: NSObject, UNUserNotificationCenterDelegate {
+final class ReminderTapHandler: NSObject, UNUserNotificationCenterDelegate, Sendable {
     static let shared = ReminderTapHandler()
 
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse) async {

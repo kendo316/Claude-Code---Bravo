@@ -2,7 +2,7 @@ import Foundation
 
 /// Reads and writes the app's one data file.
 /// It lives in the app's private storage and is encrypted by iOS whenever the phone is locked.
-final class CardFile {
+final class CardFile: Sendable {
     private let url: URL
     private let queue = DispatchQueue(label: "FindersKeepers.CardFile", qos: .utility)   // one write at a time, in order
 
