@@ -23,7 +23,7 @@ enum ScreenshotReader {
 
         var reading = Reading()
         reading.text = String(text.prefix(maxStoredCharacters))
-        reading.facts = TextFacts.find(in: text)
+        reading.facts = TextFacts.find(in: text, captured: asset.creationDate ?? Date())
 
         if let filing = await OnDeviceModel.file(text) {
             reading.title = filing.title

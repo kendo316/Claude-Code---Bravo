@@ -16,14 +16,20 @@ enum TextRules {
         return nil
     }
 
-    /// True for "Dec 4" or "12/4", false for a bare clock time like "7:30 PM".
-    /// The system date detector reads a bare time as "today", which is never what a screenshot means.
+    /// True only for a real calendar day: "Dec 4", "Friday, December 4" or "12/4/2026".
+    /// A bare clock time ("7:30 PM"), a lone weekday ("open Tuesday to Sunday") and a fraction
+    /// ("1/2 cup") are all things the system date detector will happily call a date. None of them
+    /// is worth a reminder, so they are turned away here.
     static func namesADay(_ phrase: String) -> Bool {
         let folded = phrase.foldedForSearch
-        let words = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec",
-                     "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "tomorrow"]
-        if words.contains(where: { folded.contains($0) }) { return true }
-        return folded.range(of: #"\d{1,2}[/.-]\d{1,2}"#, options: .regularExpression) != nil
+        let months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"]
+        if months.contains(where: { folded.contains($0) }) { return true }
+        return folded.range(of: #"\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2,4}\b"#, options: .regularExpression) != nil
+    }
+
+    /// True when the phrase spells out its year, as in "December 4, 2026" or "12/4/26".
+    static func statesItsYear(_ phrase: String) -> Bool {
+        phrase.range(of: #"\b(19|20)\d{2}\b|\b\d{1,2}[/.-]\d{1,2}[/.-]\d{2}\b"#, options: .regularExpression) != nil
     }
 
     /// Splits what was typed into the search field into words to look for.

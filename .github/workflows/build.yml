@@ -40,13 +40,19 @@ jobs:
   screens:
     name: Run in a simulator
     runs-on: xcode-27
+    permissions:
+      contents: write
     timeout-minutes: 40
     steps:
       - uses: actions/checkout@v4
       - run: bash tools/simulator_shots.sh
-      - uses: actions/upload-artifact@v4
+      - name: Publish the screenshots to a side branch
         if: always()
-        with:
-          name: screens
-          path: shots
-          retention-days: 7
+        run: |
+          cd shots
+          for f in *.png; do sips -Z 1500 -s format jpeg -s formatOptions 82 "$f" --out "${f%.png}.jpg" >/dev/null; done
+          rm -f *.png
+          git init -q -b finders-keepers-shots .
+          git add -A
+          git -c user.name="build" -c user.email="build@users.noreply.github.com" commit -q -m "Simulator screenshots for ${GITHUB_SHA::7}"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" finders-keepers-shots

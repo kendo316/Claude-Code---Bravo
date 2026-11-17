@@ -10,7 +10,7 @@ REG = "/usr/share/fonts/opentype/inter/Inter-Regular.otf"
 
 SHOTS = [
     ("1-recipe", "2019:06:02 18:20:11", (250, 246, 238), (30, 30, 30), "Skillet Cornbread", [
-        "Ingredients", "2 tbsp butter", "1 cup cornmeal", "1 cup buttermilk", "2 eggs", "",
+        "Ingredients", "2 tbsp butter", "1/2 cup cornmeal", "1 cup buttermilk", "2 eggs", "",
         "Preheat oven to 425 degrees.", "Bake 20 minutes until golden.", "Makes 8 servings."]),
     ("2-taqueria", "2021:09:14 12:05:40", (255, 255, 255), (20, 40, 30), "Casa Verde Taqueria", [
         "Tacos, tortas and a long menu of salsas", "", "Open Tuesday to Sunday", "11:00 AM to 9:00 PM", "",
